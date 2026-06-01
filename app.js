@@ -1,6 +1,6 @@
 const socket = io();
 
-const KILOMETER_RATE_CONFIG = { carro: { base: 4.00, perKm: 0.95, minDistance: 2.5 } };
+const KILOMETER_RATE_CONFIG = { carro: { base: 4.00, perKm: 0.95, minDistance: 2.5 }, moto: { base: 2.00, perKm: 0.50, minDistance: 2.0 } };
 
 const API = {
     async get(url) { const r = await fetch(url); return r.json(); },
@@ -21,7 +21,8 @@ const App = {
     _selectedPaymentMethod: 'rkm',
     _pendingTimerInterval: null,
     _pendingTimerEnd: null,
-    _TRIP_TIMEOUT_MS: 120000,
+    _conductorPollingInterval: null,
+    _TRIP_TIMEOUT_MS: 180000,
 
     async init() {
         const savedSession = localStorage.getItem('turides_session');
@@ -90,13 +91,48 @@ const App = {
                 this.renderNavbar();
             }
         });
+
+        socket.on('connect', () => {
+            if (this.session) {
+                socket.emit('join', this.session.role + '_' + this.session.id);
+            }
+        });
+
+        socket.on('reconnect', () => {
+            if (this.session) {
+                socket.emit('join', this.session.role + '_' + this.session.id);
+                this.updateViewContent();
+            }
+        });
     },
+
+    startConductorPolling() {
+        this.stopConductorPolling();
+        this._conductorPollingInterval = setInterval(async () => {
+            if (!this.session || this.session.role !== 'conductor') return;
+            const prev = this._lastKnownTripStatus;
+            try {
+                const trips = await API.get('/api/trips');
+                const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
+                if (activeTrip && activeTrip.status === 'pendiente' && prev[activeTrip.id] !== 'pendiente') {
+                    this.showToast('Nueva solicitud de viaje recibida!', 'info');
+                    this.updateViewContent();
+                }
+                if (activeTrip) this._lastKnownTripStatus[activeTrip.id] = activeTrip.status;
+            } catch (e) {}
+        }, 3000);
+    },
+
+    stopConductorPolling() { if (this._conductorPollingInterval) { clearInterval(this._conductorPollingInterval); this._conductorPollingInterval = null; } },
 
     route() {
         if (!this.session) {
+            this.stopConductorPolling();
             this.showView('login');
         } else {
             socket.emit('join', this.session.role + '_' + this.session.id);
+            if (this.session.role === 'conductor') this.startConductorPolling();
+            else this.stopConductorPolling();
             this.showView(this.session.role);
         }
     },
@@ -252,7 +288,7 @@ const App = {
                 const secs = Math.floor((remaining % 60000) / 1000);
                 const pct = Math.max(0, (remaining / this._TRIP_TIMEOUT_MS) * 100);
                 const barColor = pct < 30 ? 'linear-gradient(90deg, #ef4444, #f87171)' : pct < 60 ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #06b6d4, #22d3ee)';
-                html += `<div class="pending-timer-card mb-4"><div class="pending-timer-header"><span class="text-xs text-gray uppercase font-bold">Tiempo de espera</span><span id="pending-timer-countdown" class="pending-timer-value">${mins}:${secs.toString().padStart(2, '0')}</span></div><div class="pending-timer-track"><div id="pending-timer-bar" class="pending-timer-fill" style="width:${pct}%; background:${barColor};"></div></div><p class="text-xs text-gray text-center mt-2">El conductor tiene 2 minutos para responder.</p></div>
+                html += `<div class="pending-timer-card mb-4"><div class="pending-timer-header"><span class="text-xs text-gray uppercase font-bold">Tiempo de espera</span><span id="pending-timer-countdown" class="pending-timer-value">${mins}:${secs.toString().padStart(2, '0')}</span></div><div class="pending-timer-track"><div id="pending-timer-bar" class="pending-timer-fill" style="width:${pct}%; background:${barColor};"></div></div><p class="text-xs text-gray text-center mt-2">El conductor tiene 3 minutos para responder.</p></div>
                 <button onclick="App.cancelTrip('${activeTrip.id}')" class="btn btn-red w-full mb-2">Cancelar Solicitud</button>`;
                 if (!this._pendingTimerInterval) this.startPendingTimer();
             }
