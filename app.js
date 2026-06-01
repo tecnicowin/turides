@@ -234,6 +234,9 @@ const App = {
             fareLabel.textContent = labels[this._fareInfo.period] || 'Tarifa Normal';
             fareLabel.className = `badge text-xs ${colors[this._fareInfo.period] || 'text-emerald'}`;
         }
+
+        const footerBcv = document.getElementById('footer-bcv-rate');
+        if (footerBcv) footerBcv.textContent = this._bcvRate;
     },
 
     async updateViewContent() {
@@ -337,7 +340,7 @@ const App = {
             else if (activeTrip.status === 'pago_verificado') { statusMsg = 'Pago verificado. Califica tu experiencia.'; statusBadge = 'text-emerald font-bold'; }
             else if (activeTrip.status === 'calificado') { statusMsg = 'Viaje finalizado. Gracias!'; statusBadge = 'text-purple font-bold'; }
             const paymentLabel = activeTrip.paymentMethod === 'rkm' ? 'Billetera RKM' : 'Pago Movil';
-            const farePeriodLabels = { normal: '', diurno: '', pico: ' (Hora Pico +30%)', noche: ' (Noche +20%) };
+            const farePeriodLabels = { normal: '', diurno: '', pico: ' (Hora Pico +30%)', noche: ' (Noche +20%)' };
             const fareLabel = farePeriodLabels[activeTrip.farePeriod] || '';
 
             let html = `<div class="glass-card">
@@ -402,6 +405,8 @@ const App = {
             const labels = { normal: 'Tarifa Normal', diurno: 'Tarifa Diurna', pico: 'Hora Pico (+30%)', noche: 'Noche (+20%)' };
             fareInfoEl.textContent = labels[this._fareInfo.period] || 'Tarifa Normal';
         }
+
+        this.renderClientSettings().catch(() => {});
     },
 
     async processAutomatedSearch() {
@@ -419,7 +424,7 @@ const App = {
         this.foundConductors = await API.get(`/api/conductors/available?distance=${simulatedKm}&vehicleType=${vehicleType}`);
         if (this.foundConductors.length === 0) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${vehicleType === 'moto' ? 'moto' : 'carro'} disponibles</p></div>`; return; }
         let html = '';
-        const fareLabels = { normal: '', diurno: '', pico: ' (HP +30%)', noche: ' (Noche +20%) };
+        const fareLabels = { normal: '', diurno: '', pico: ' (HP +30%)', noche: ' (Noche +20%)' };
         const fareTag = fareLabels[this.foundConductors[0]?.farePeriod] || '';
         if (fareTag) {
             html += `<div class="p-3 rounded mb-3 text-center font-bold text-xs border-l-cyan" style="background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.2);">⚡ Tarifa dinamica activa: ${fareTag} (Multiplicador: x${this.foundConductors[0]?.fareMultiplier || 1})</div>`;
