@@ -288,7 +288,7 @@ const App = {
                 const secs = Math.floor((remaining % 60000) / 1000);
                 const pct = Math.max(0, (remaining / this._TRIP_TIMEOUT_MS) * 100);
                 const barColor = pct < 30 ? 'linear-gradient(90deg, #ef4444, #f87171)' : pct < 60 ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #06b6d4, #22d3ee)';
-                html += `<div class="pending-timer-card mb-4"><div class="pending-timer-header"><span class="text-xs text-gray uppercase font-bold">Tiempo de espera</span><span id="pending-timer-countdown" class="pending-timer-value">${mins}:${secs.toString().padStart(2, '0')}</span></div><div class="pending-timer-track"><div id="pending-timer-bar" class="pending-timer-fill" style="width:${pct}%; background:${barColor};"></div></div><p class="text-xs text-gray text-center mt-2">El conductor tiene 3 minutos para responder.</p></div>
+                html += `<div class="pending-timer-card mb-4"><div class="pending-timer-header"><span class="text-xs text-gray uppercase font-bold">Tiempo de espera</span><span id="pending-timer-countdown" class="pending-timer-value">${mins}:${secs.toString().padStart(2, '0')}</span></div><div class="pending-timer-track"><div id="pending-timer-bar" class="pending-timer-fill" style="width:${pct}%; background:${barColor};"></div></div><p class="text-xs text-gray text-center mt-2">El conductor tiene tiempo para responder. Puedes cancelar si lo deseas.</p></div>
                 <button onclick="App.cancelTrip('${activeTrip.id}')" class="btn btn-red w-full mb-2">Cancelar Solicitud</button>`;
                 if (!this._pendingTimerInterval) this.startPendingTimer();
             }
@@ -444,24 +444,31 @@ const App = {
         this.stopPendingTimer();
         this._pendingTimerInterval = setInterval(async () => {
             if (!this.session) return;
-            const trips = await API.get('/api/trips');
-            const activeTrip = trips.find(t => t.clientId === this.session?.id && t.status === 'pendiente');
-            if (!activeTrip) { this.stopPendingTimer(); this.updateViewContent(); return; }
-            const remaining = Math.max(0, (new Date(activeTrip.createdAt).getTime() + this._TRIP_TIMEOUT_MS) - Date.now());
-            if (remaining <= 0) { this.onPendingTimerExpire(activeTrip.id); return; }
-            const timerEl = document.getElementById('pending-timer-countdown');
-            if (timerEl) {
-                const mins = Math.floor(remaining / 60000);
-                const secs = Math.floor((remaining % 60000) / 1000);
-                timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-                const barEl = document.getElementById('pending-timer-bar');
-                if (barEl) {
-                    const pct = (remaining / this._TRIP_TIMEOUT_MS) * 100;
-                    barEl.style.width = `${pct}%`;
-                    if (pct < 30) barEl.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
-                    else if (pct < 60) barEl.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+            try {
+                const trips = await API.get('/api/trips');
+                const activeTrip = trips.find(t => t.clientId === this.session?.id && t.status === 'pendiente');
+                if (!activeTrip) { this.stopPendingTimer(); this.updateViewContent(); return; }
+                const tripCreated = new Date(activeTrip.createdAt).getTime();
+                const remaining = Math.max(0, this._TRIP_TIMEOUT_MS - (Date.now() - tripCreated));
+                const timerEl = document.getElementById('pending-timer-countdown');
+                if (timerEl) {
+                    const mins = Math.floor(remaining / 60000);
+                    const secs = Math.floor((remaining % 60000) / 1000);
+                    timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    const barEl = document.getElementById('pending-timer-bar');
+                    if (barEl) {
+                        const pct = (remaining / this._TRIP_TIMEOUT_MS) * 100;
+                        barEl.style.width = `${pct}%`;
+                        if (pct < 30) barEl.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
+                        else if (pct < 60) barEl.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+                    }
+                    if (remaining <= 0) {
+                        timerEl.textContent = 'Esperando...';
+                        const label = document.querySelector('.pending-timer-header .text-xs');
+                        if (label) label.textContent = 'SIN LIMITE - Esperando respuesta del conductor';
+                    }
                 }
-            }
+            } catch(e) {}
         }, 1000);
     },
 
