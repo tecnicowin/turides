@@ -236,7 +236,7 @@ const App = {
     async renderClienteDashboard() {
         const allTrips = await API.get('/api/trips');
         const trips = allTrips.filter(t => t.clientId === this.session.id);
-        const activeTrip = trips.find(t => ['pendiente', 'aceptado', 'completado', 'pago_verificado', 'calificado'].includes(t.status));
+        const activeTrip = trips.find(t => ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
         const activeContainer = document.getElementById('cliente-active-trip');
         const searchCard = document.getElementById('cliente-search-container');
 
@@ -505,7 +505,7 @@ const App = {
         const activeContainer = document.getElementById('conductor-active-trip');
         const radarContainer = document.getElementById('conductor-radar-container');
         const trips = await API.get('/api/trips');
-        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado', 'calificado'].includes(t.status));
+        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
 
         if (activeTrip) {
             radarContainer.style.display = 'none'; activeContainer.style.display = 'block';
