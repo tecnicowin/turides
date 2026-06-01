@@ -1,0 +1,28 @@
+Tanto **Yummy Rides** como **Ridery** manejan tarifas muy similares en Caracas, estructuradas bajo un esquema de **tarifa base mínima + costo por kilómetro + factor de alta demanda (tarifa dinámica)**.
+
+Para las distancias cortas (de menos de 2 o 3 kilómetros), los precios se clavan en la tarifa mínima de la aplicación. A partir de allí, el kilometraje empieza a sumar de forma lineal.
+
+A continuación, tienes el promedio estimado de precios según la distancia y el tipo de vehículo:
+
+---
+
+### Promedio de Precios por Kilómetro
+
+| Distancia (km) | Moto (Yummy / Ridery) | Carro (Yummy Eco / Ridery Eco) |
+| --- | --- | --- |
+| **Tarifa Mínima** (0 a 2.5 km) | **$1.50 – $2.00** | **$3.50 – $4.00** |
+| **Corto** (~5 km) | $2.50 – $3.50 | $5.50 – $6.50 |
+| **Medio** (~10 km) | $4.50 – $6.00 | $9.00 – $11.00 |
+| **Largo** (~15 km o más) | $7.00 – $9.00 | $13.00 – $16.00 |
+
+> **Nota sobre el costo por km:** En líneas generales, una vez superada la tarifa mínima, el kilómetro adicional en **moto** se promedia entre **$0.40 y $0.50**, mientras que en **carro** se ubica entre **$0.80 y $1.00**.
+
+---
+
+### Factores clave que alteran el precio
+
+Tres variables importantes hacen que el costo varíe de un momento a otro:
+
+* **Tarifa Dinámica (Alta demanda):** Si buscas un viaje en hora pico (7:00 am a 9:00 am / 5:00 pm a 7:00 pm) o si empieza a llover con fuerza en la ciudad, el precio de una misma ruta en carro o moto puede subir entre un **20% y un 50%** debido a la falta de conductores disponibles.
+* **Modalidades internas:** Ridery cuenta con opciones como *Ridery Eco* (más económica) y *Confort/Premium* (carros más nuevos y costosos). Yummy maneja un sistema similar con *Yummy Chamo* (motos) y *Yummy Eco/Full* (carros), además de su función "Cuádralo", donde el usuario o el conductor pueden negociar ligeramente el precio base de la carrera en tiempo real si está difícil conseguir asignación.
+* **Horario nocturno:** Pasadas las 10:00 pm, las tarifas base suelen tener un ligero incremento de seguridad.

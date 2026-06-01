@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>TuRides - Transporte Privado de Pasajeros</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Overlay de Notificación: Solicitud Aceptada -->
+    <div id="acceptance-overlay" class="acceptance-overlay hidden">
+        <div class="acceptance-modal">
+            <div class="acceptance-icon">✅</div>
+            <h2 class="acceptance-title">¡Solicitud Aceptada!</h2>
+            <p class="acceptance-subtitle">Tu conductor ha confirmado tu servicio de transporte.</p>
+            <div id="acceptance-details" class="acceptance-detail-card">
+                <!-- Se inyecta dinámicamente -->
+            </div>
+            <div class="acceptance-contact-msg">
+                📞 El conductor se pondrá en contacto contigo a la brevedad para coordinar los detalles del viaje.
+            </div>
+            <button onclick="App.closeAcceptanceOverlay()" class="acceptance-btn-close">Entendido ✓</button>
+        </div>
+    </div>
+
+    <!-- MAIN NAVBAR -->
+    <nav id="main-nav" class="main-nav" style="display: none;">
+        <div class="nav-brand">
+            <span class="logo-emoji">⚡</span> <span class="logo-text">TuRides</span>
+        </div>
+        <div class="nav-profile">
+            <span id="nav-user-balance" class="nav-balance"></span>
+            <span id="nav-rkm-balance" class="nav-rkm hidden">
+                <span class="rkm-icon">💰</span> RKM: <strong id="nav-rkm-amount">$0.00</strong>
+                <button onclick="App.openRKMRechargeModal()" class="btn-recharge">+</button>
+            </span>
+            <div class="user-meta">
+                <span id="nav-user-name" class="user-name">Usuario</span>
+                <span id="nav-user-role" class="user-role">Rol</span>
+            </div>
+            <button onclick="App.logout()" class="btn btn-logout" id="logout-btn">Salir</button>
+        </div>
+    </nav>
+
+    <!-- CONTAINER SPA -->
+    <main class="app-container">
+
+        <!-- ================= PANTALLA: LOGIN & REGISTRO ================= -->
+        <section id="view-login" class="app-view">
+            <div class="welcome-grid">
+                <div class="welcome-info">
+                    <h1 class="brand-title">TuRides</h1>
+                    <p class="brand-tagline">Plataforma inteligente de transporte y encomiendas privadas.</p>
+                    <div class="feature-bullets">
+                        <div class="bullet-item">
+                            <span class="bullet-icon">📍</span>
+                            <div>
+                                <h4>Cálculo Automático</h4>
+                                <p>Ingresa tus direcciones de salida y llegada; el sistema calculará la distancia satelital al instante.</p>
+                            </div>
+                        </div>
+                        <div class="bullet-item">
+                            <span class="bullet-icon">📱</span>
+                            <div>
+                                <h4>100% Mobile Responsive</h4>
+                                <p>Optimizado con enfoque Mobile-First para uso cómodo en teléfonos celulares.</p>
+                            </div>
+                        </div>
+                        <div class="bullet-item">
+                            <span class="bullet-icon">👥</span>
+                            <div>
+                                <h4>Interacción Directa</h4>
+                                <p>Compara y contrata de inmediato entre múltiples conductores en línea disponibles.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="auth-card-container">
+                    <!-- Tarjeta de Login -->
+                    <div id="login-card" class="glass-card auth-card">
+                        <h2 class="text-2xl font-bold mb-2">Iniciar Sesión</h2>
+                        <p class="text-gray mb-6 text-sm">Acceso privado para Clientes, Conductores y Administradores.</p>
+                        
+                        <form id="login-form">
+                            <div class="form-group">
+                                <label for="login-email">Correo Electrónico</label>
+                                <input type="email" id="login-email" required placeholder="ejemplo@turides.com" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="login-password">Contraseña</label>
+                                <input type="password" id="login-password" required placeholder="••••••••" class="input">
+                            </div>
+                            <button type="submit" class="btn btn-purple w-full mt-4">Entrar al Sistema</button>
+                        </form>
+                        <p class="auth-switch mt-4 text-center text-sm">
+                            ¿Aún no tienes cuenta? <a href="#" onclick="document.getElementById('login-card').style.display='none'; document.getElementById('register-card').style.display='block';" class="text-purple font-bold">Postúlate o Regístrate aquí</a>
+                        </p>
+                        <div class="demo-credentials mt-4 p-3 bg-gray rounded text-xs">
+                            <p class="font-bold text-purple mb-1">Cuentas demo (Contraseña: 123):</p>
+                            <ul class="font-mono">
+                                <li>Conductor Tarifa Fija: conductor1@turides.com</li>
+                                <li>Conductor Kilómetros: conductor2@turides.com</li>
+                                <li>Conductor Prueba: conductor4@turides.com</li>
+                                <li>Cliente: cliente1@gmail.com</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Tarjeta de Registro y Postulación -->
+                    <div id="register-card" class="glass-card auth-card" style="display: none;">
+                        <h2 class="text-2xl font-bold mb-2">Registro & Postulación</h2>
+                        <p class="text-gray mb-4 text-sm">Completa tu información para unirte a TuRides.</p>
+                        
+                        <form id="register-form">
+                            <div class="form-group">
+                                <label for="reg-name">Nombre y Apellido</label>
+                                <input type="text" id="reg-name" required placeholder="Ej. Pedro Infante" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="reg-phone">Celular de Contacto</label>
+                                <input type="tel" id="reg-phone" required placeholder="Ej. 0412-5556677" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="reg-email">Correo Electrónico</label>
+                                <input type="email" id="reg-email" required placeholder="ejemplo@turides.com" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="reg-password">Contraseña</label>
+                                <input type="password" id="reg-password" required placeholder="Mínimo 6 caracteres" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="reg-role">Rol en la aplicación</label>
+                                <select id="reg-role" class="input">
+                                    <option value="cliente">Cliente (Solicitar servicios)</option>
+                                    <option value="conductor">Conductor Privado (Postulación)</option>
+                                </select>
+                            </div>
+                            
+                            <!-- BLOQUE EXCLUSIVO CONDUCTOR -->
+                            <div id="reg-conductor-block" style="display: none;" class="mt-4 border-t border-gray pt-4">
+                                <h3 class="text-sm font-bold text-purple uppercase mb-3">Ficha de Postulacion de Conductor</h3>
+                                
+                                <div class="form-group mb-3">
+                                    <label>Tipo de Vehiculo</label>
+                                    <div class="payment-methods-grid">
+                                        <label class="payment-method-option selected" data-method="carro">
+                                            <input type="radio" name="reg-vehicle-type" value="carro" checked>
+                                            <span class="pm-icon">🚗</span>
+                                            <span class="pm-name">Carro</span>
+                                        </label>
+                                        <label class="payment-method-option" data-method="moto">
+                                            <input type="radio" name="reg-vehicle-type" value="moto">
+                                            <span class="pm-icon">🏍️</span>
+                                            <span class="pm-name">Moto</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-2 gap-3 mb-3">
+                                    <div class="form-group">
+                                        <label for="reg-brand">Marca del Vehiculo</label>
+                                        <input type="text" id="reg-brand" placeholder="Ej. Toyota" class="input">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="reg-model">Modelo del Vehiculo</label>
+                                        <input type="text" id="reg-model" placeholder="Ej. Corolla" class="input">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-2 gap-3 mb-3">
+                                    <div class="form-group">
+                                        <label for="reg-passengers">Capacidad Pasajeros</label>
+                                        <input type="number" id="reg-passengers" min="1" max="15" value="4" class="input">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="reg-suitcases">Capacidad Maletas</label>
+                                        <input type="number" id="reg-suitcases" min="0" max="10" value="2" class="input">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-purple w-full mt-4">Completar Registro</button>
+                        </form>
+                        <p class="auth-switch mt-4 text-center text-sm">
+                            ¿Ya estás registrado? <a href="#" onclick="document.getElementById('register-card').style.display='none'; document.getElementById('login-card').style.display='block';" class="text-purple font-bold">Inicia Sesión</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= PANTALLA: CLIENTE DASHBOARD ================= -->
+        <section id="view-cliente" class="app-view" style="display: none;">
+            <div class="dashboard-grid">
+                
+                <!-- Columna Izquierda: Buscador de Conductores -->
+                <div class="grid-col-form">
+                    
+                    <!-- Estado de viaje en curso -->
+                    <div id="cliente-active-trip" style="display: none;" class="mb-4"></div>
+
+                    <!-- Buscador principal simplificado -->
+                    <div id="cliente-search-container" class="glass-card">
+                        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <span>🔍</span> Solicitar Conductor Disponible
+                        </h2>
+                        
+                        <form id="client-search-form">
+                            <div class="form-group">
+                                <label class="payment-methods-label">Tipo de Vehiculo</label>
+                                <div class="payment-methods-grid">
+                                    <label class="payment-method-option selected" data-method="carro">
+                                        <input type="radio" name="vehicle-type" value="carro" checked>
+                                        <span class="pm-icon">🚗</span>
+                                        <span class="pm-name">Carro</span>
+                                        <span class="pm-desc">4 pasajeros</span>
+                                    </label>
+                                    <label class="payment-method-option" data-method="moto">
+                                        <input type="radio" name="vehicle-type" value="moto">
+                                        <span class="pm-icon">🏍️</span>
+                                        <span class="pm-name">Moto</span>
+                                        <span class="pm-desc">1 pasajero - Mas economico</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="client-origin-address">Direccion Exacta de Salida</label>
+                                <input type="text" id="client-origin-address" required placeholder="Ej. Altamira" class="input">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="client-destination-address">Direccion Exacta de Destino</label>
+                                <input type="text" id="client-destination-address" required placeholder="Ej. Aeropuerto Maiquetia" class="input">
+                            </div>
+
+                            <!-- Indicador automático de kilómetros calculados -->
+                            <div id="gps-calculated-distance-badge" class="p-3 bg-gray rounded text-xs mb-4 text-center border-l-purple font-bold" style="display: none;">
+                                Kilómetros calculados: <strong class="text-cyan">0.0 km</strong>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="payment-methods-label">Método de Pago</label>
+                                <div class="payment-methods-grid">
+                                    <label class="payment-method-option selected" data-method="rkm">
+                                        <input type="radio" name="payment-method" value="rkm" checked>
+                                        <span class="pm-icon">💰</span>
+                                        <span class="pm-name">Billetera RKM</span>
+                                        <span class="pm-desc">Paga directo desde tu saldo</span>
+                                    </label>
+                                    <label class="payment-method-option" data-method="pago_movil">
+                                        <input type="radio" name="payment-method" value="pago_movil">
+                                        <span class="pm-icon">📱</span>
+                                        <span class="pm-name">Pago Móvil</span>
+                                        <span class="pm-desc">Transferencia bancaria</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-purple w-full mt-2">Buscar Conductores Disponibles</button>
+                        </form>
+
+                        <!-- RESULTADOS DEL FILTRADO DE CONDUCTORES -->
+                        <div class="mt-6">
+                            <h3 class="text-sm font-bold text-purple uppercase mb-3">Conductores Disponibles en Línea</h3>
+                            <div id="available-conductors-list" class="radar-list">
+                                <p class="text-center text-gray text-xs p-4">Introduce tus direcciones de salida y llegada para cotizar al instante.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha: Historial y Billetera del Cliente -->
+                <div class="grid-col-history">
+                    <div class="glass-card">
+                        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <span>📋</span> Mis Solicitudes Contratadas
+                        </h2>
+                        <div id="cliente-history" class="table-container">
+                            <!-- Historial inyectado por JS -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= PANTALLA: CONDUCTOR DASHBOARD ================= -->
+        <section id="view-conductor" class="app-view" style="display: none;">
+            <div class="dashboard-grid">
+                
+                <!-- Columna Izquierda: Radar y Solicitudes Entrantes -->
+                <div class="grid-col-form">
+                    
+                    <!-- Solicitud en curso -->
+                    <div id="conductor-active-trip" style="display: none;" class="mb-4"></div>
+
+                    <!-- Consola de Radar del Conductor -->
+                    <div id="conductor-radar-container" class="glass-card">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray">
+                            <h2 class="text-xl font-bold flex items-center gap-2">
+                                <span class="radar-dot animate-pulse"></span> Panel de Disponibilidad
+                            </h2>
+                            <label class="switch-container">
+                                <input type="checkbox" id="conductor-availability" onchange="App.toggleAvailability(this)">
+                                <span class="switch-label">Disponible</span>
+                            </label>
+                        </div>
+
+                        <div id="conductor-radar-list" class="radar-list">
+                            <!-- Radar de estado de cobertura -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha: Historial del Conductor -->
+                <div class="grid-col-history">
+                    <div class="glass-card">
+                        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <span>💸</span> Mis Servicios Realizados
+                        </h2>
+                        <div id="conductor-history" class="table-container">
+                            <!-- Historial del conductor -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= PANTALLA: ADMINISTRADOR ================= -->
+        <section id="view-admin" class="app-view" style="display: none;">
+            <div class="stats-row grid grid-4 gap-4 mb-6">
+                <div class="glass-card stat-card text-center">
+                    <p class="text-gray text-xs uppercase font-bold">Servicios Registrados</p>
+                    <p id="admin-stat-trips" class="text-3xl font-extrabold text-purple">0</p>
+                </div>
+                <div class="glass-card stat-card text-center">
+                    <p class="text-gray text-xs uppercase font-bold">Completados</p>
+                    <p id="admin-stat-completed" class="text-3xl font-extrabold text-emerald">0</p>
+                </div>
+                <div class="glass-card stat-card text-center">
+                    <p class="text-gray text-xs uppercase font-bold">Volumen Total</p>
+                    <p id="admin-stat-volume" class="text-3xl font-extrabold text-cyan">$0.00</p>
+                </div>
+                <div class="glass-card stat-card text-center">
+                    <p class="text-gray text-xs uppercase font-bold">Liquidación (15%)</p>
+                    <p id="admin-stat-platform" class="text-3xl font-extrabold text-pink">$0.00</p>
+                </div>
+            </div>
+
+            <!-- Fila Base de Datos -->
+            <div class="glass-card">
+                <h2 class="text-xl font-bold mb-4">👥 Base de Datos General (Clientes & Conductores)</h2>
+                <div id="admin-users-list" class="table-container">
+                </div>
+            </div>
+
+            <!-- Fila Transacciones de Pago -->
+            <div class="glass-card mt-4">
+                <h2 class="text-xl font-bold mb-4">💳 Historial de Transacciones de Pago</h2>
+                <div id="admin-transactions-list" class="table-container">
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="app-footer">
+        <p>&copy; 2026 TuRides Inc. Consola Privada de Gestión de Transportes.</p>
+    </footer>
+
+    <!-- Modal de Pago -->
+    <div id="payment-modal" class="payment-overlay hidden">
+        <div class="payment-modal">
+            <div class="payment-header">
+                <h2>Finalizar Pago</h2>
+                <span class="payment-amount" id="payment-modal-amount">$0.00</span>
+            </div>
+            
+            <div class="payment-methods-modal">
+                <div class="payment-method-option-modal selected" data-method="rkm" onclick="App.selectPaymentMethod('rkm')">
+                    <span class="pm-modal-icon">💰</span>
+                    <span class="pm-modal-name">Billetera RKM</span>
+                    <span class="pm-modal-desc">Saldo disponible: <strong id="payment-rkm-balance">$0.00</strong></span>
+                </div>
+                <div class="payment-method-option-modal" data-method="pago_movil" onclick="App.selectPaymentMethod('pago_movil')">
+                    <span class="pm-modal-icon">📱</span>
+                    <span class="pm-modal-name">Pago Móvil</span>
+                    <span class="pm-modal-desc">Transferencia bancaria</span>
+                </div>
+            </div>
+
+            <div id="rkm-payment-section" class="payment-section">
+                <div class="rkm-info-card">
+                    <p class="rkm-info-text">Se descontará el monto de tu billetera RKM</p>
+                    <p class="rkm-info-balance">Saldo: <strong id="rkm-payment-balance">$0.00</strong></p>
+                </div>
+            </div>
+
+            <div id="pago-movil-section" class="payment-section" style="display: none;">
+                <div class="pm-details-card">
+                    <p class="pm-details-title">Datos para el Pago Móvil</p>
+                    <div class="pm-account-info">
+                        <div class="pm-info-row"><span>Banco:</span><strong id="pm-bank-name">-</strong></div>
+                        <div class="pm-info-row"><span>Cuenta:</span><strong id="pm-account-number">-</strong></div>
+                        <div class="pm-info-row"><span>Titular:</span><strong id="pm-holder-name">-</strong></div>
+                        <div class="pm-info-row"><span>RIF/Cédula:</span><strong id="pm-document">-</strong></div>
+                    </div>
+                    <div class="pm-form">
+                        <div class="form-group">
+                            <label>Teléfono del titular</label>
+                            <input type="tel" id="pm-phone" placeholder="0412-0000000" class="input" oninput="App.validatePagoMovil()">
+                        </div>
+                        <div class="form-group">
+                            <label>Banco de origen</label>
+                            <select id="pm-bank" class="input" onchange="App.validatePagoMovil()">
+                                <option value="">Seleccionar banco</option>
+                                <option value="0102">Banco de Venezuela</option>
+                                <option value="0104">Banco Provincial</option>
+                                <option value="0105">Banco Mercantil</option>
+                                <option value="0108">Banco BBVA</option>
+                                <option value="0114">Banco Bancaribe</option>
+                                <option value="0116">Banco Plaza</option>
+                                <option value="0128">Banco Banco Occidental</option>
+                                <option value="0134">Banco Venezolano de Crédito</option>
+                                <option value="0151">Banco BFC</option>
+                                <option value="0156">Banco 100% Banco</option>
+                                <option value="0157">Banco Del Tesoro</option>
+                                <option value="0163">Banco Guerra</option>
+                                <option value="0166">Banco Banco de la Fuerza Armada</option>
+                                <option value="0168">Banco Bancrecer</option>
+                                <option value="0169">Banco Mi Banco</option>
+                                <option value="0171">Banco Banco del Pueblo Soberano</option>
+                                <option value="0172">Banco Bancamiga</option>
+                                <option value="0173">Banco Internacional</option>
+                                <option value="0174">Banco Banplus</option>
+                                <option value="0175">Banco Bicentenario</option>
+                                <option value="0176">Banco Bank of China</option>
+                                <option value="0177">Banco Facilito</option>
+                                <option value="0178">Banco Nexo</option>
+                                <option value="0179">Banco BOD</option>
+                                <option value="0180">Banco Credicoop</option>
+                                <option value="0181">Banco Soladad</option>
+                                <option value="0182">Banco Voz Vista</option>
+                                <option value="0183">Banco Proveer</option>
+                                <option value="0184">Banco Daimler</option>
+                                <option value="0185">Banco Fondo Común</option>
+                                <option value="0186">Banco ABC</option>
+                                <option value="0187">Banco Magna</option>
+                                <option value="0188">Banco SoftBank</option>
+                                <option value="0189">Banco Agro</option>
+                                <option value="0190">Banco Cerro</option>
+                                <option value="0191">Banco Unión</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Nro. Referencia (6 dígitos)</label>
+                            <input type="text" id="pm-reference" placeholder="Ej. 123456" maxlength="6" class="input" oninput="App.validatePagoMovil()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="payment-actions">
+                <button onclick="App.closePaymentModal()" class="btn btn-outline w-full">Cancelar</button>
+                <button id="payment-confirm-btn" onclick="App.processPayment()" class="btn btn-emerald w-full" disabled>Pagar con RKM</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Calificación -->
+    <div id="rating-modal" class="payment-overlay hidden">
+        <div class="payment-modal rating-modal">
+            <div class="rating-header">
+                <div class="rating-avatar">⭐</div>
+                <h2 id="rating-title">Calificar</h2>
+                <p id="rating-subtitle" class="text-gray text-sm">¿Cómo fue tu experiencia?</p>
+                <p id="rating-user-name" class="rating-user-name">-</p>
+            </div>
+            <div class="rating-stars-container">
+                <button id="rating-star-1" class="rating-star-btn" onclick="App.setRating(1)">★</button>
+                <button id="rating-star-2" class="rating-star-btn" onclick="App.setRating(2)">★</button>
+                <button id="rating-star-3" class="rating-star-btn" onclick="App.setRating(3)">★</button>
+                <button id="rating-star-4" class="rating-star-btn" onclick="App.setRating(4)">★</button>
+                <button id="rating-star-5" class="rating-star-btn" onclick="App.setRating(5)">★</button>
+            </div>
+            <p id="rating-label" class="rating-label">Selecciona una calificación</p>
+            <div class="payment-actions">
+                <button onclick="App.closeRatingModal()" class="btn btn-outline w-full">Omitir</button>
+                <button onclick="App.submitRating()" class="btn btn-purple w-full">Calificar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Recarga RKM -->
+    <div id="rkm-recharge-modal" class="payment-overlay hidden">
+        <div class="payment-modal recharge-modal">
+            <div class="payment-header">
+                <h2>Recargar Billetera RKM</h2>
+            </div>
+            <div class="recharge-form">
+                <div class="form-group">
+                    <label>Monto a recargar ($)</label>
+                    <input type="number" id="recharge-amount" min="1" step="0.01" placeholder="Ej. 50.00" class="input">
+                </div>
+                <p class="recharge-info">El monto se acreditará instantáneamente en tu billetera RKM.</p>
+            </div>
+            <div class="payment-actions">
+                <button onclick="App.closeRKMRechargeModal()" class="btn btn-outline w-full">Cancelar</button>
+                <button onclick="App.processRKMRecharge()" class="btn btn-emerald w-full">Recargar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core App JS -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
