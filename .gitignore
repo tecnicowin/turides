@@ -1,3 +1,6 @@
 node_modules/
 db.json
+turides.db
+turides.db-wal
+turides.db-shm
 .env

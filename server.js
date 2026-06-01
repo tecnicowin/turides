@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const fs = require('fs');
+const Database = require('better-sqlite3');
 const path = require('path');
 
 const app = express();
@@ -16,43 +16,126 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static(__dirname));
 
-const DB_FILE = path.join(__dirname, 'db.json');
+const DB_PATH = path.join(__dirname, 'turides.db');
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
-function loadDB() {
-    if (!fs.existsSync(DB_FILE)) {
-        const seed = {
-            users: [
-                { id: 'admin@turides.com', name: 'Administrador TuRides', email: 'admin@turides.com', password: '123', role: 'admin', balance: 0, ratings: [] },
-                { id: 'cliente1@gmail.com', name: 'Carlos Mendoza', phone: '0412-5551234', email: 'cliente1@gmail.com', password: '123', role: 'cliente', balance: 250.00, ratings: [] },
-                { id: 'cliente2@gmail.com', name: 'Ana Gomez', phone: '0424-9998877', email: 'cliente2@gmail.com', password: '123', role: 'cliente', balance: 300.00, ratings: [] },
-                { id: 'conductor1@turides.com', name: 'Pedro Infante', phone: '0414-1112233', email: 'conductor1@turides.com', password: '123', role: 'conductor', available: true, vehicle: { type: 'carro', brand: 'Toyota', model: 'Corolla 2018', passengers: 4, suitcases: 3 }, tariffMode: 'fijo', fixedTariffs: { defaultPrice: 35.00 }, balance: 45.00, ratings: [5, 4, 5, 5, 4] },
-                { id: 'conductor3@turides.com', name: 'Maria Gabriela', phone: '0424-7773322', email: 'conductor3@turides.com', password: '123', role: 'conductor', available: true, vehicle: { type: 'carro', brand: 'Ford', model: 'Explorer SUV 2020', passengers: 6, suitcases: 5 }, tariffMode: 'fijo', fixedTariffs: { defaultPrice: 55.00 }, balance: 150.00, ratings: [5, 5, 4, 5, 5, 5] },
-                { id: 'conductor2@turides.com', name: 'Juan Herrera', phone: '0416-4445566', email: 'conductor2@turides.com', password: '123', role: 'conductor', available: true, vehicle: { type: 'carro', brand: 'Chevrolet', model: 'Aveo 2015', passengers: 4, suitcases: 2 }, tariffMode: 'kilometros', fixedTariffs: {}, balance: 80.00, ratings: [4, 3, 4, 5, 3] },
-                { id: 'conductor4@turides.com', name: 'Carlos Prueba', phone: '0412-9998877', email: 'conductor4@turides.com', password: '123', role: 'conductor', available: true, vehicle: { type: 'carro', brand: 'Hyundai', model: 'Accent 2022', passengers: 4, suitcases: 3 }, tariffMode: 'fijo', fixedTariffs: { defaultPrice: 25.00 }, balance: 0.00, ratings: [] },
-                { id: 'conductor5@turides.com', name: 'Luis Motero', phone: '0412-5551122', email: 'conductor5@turides.com', password: '123', role: 'conductor', available: true, vehicle: { type: 'moto', brand: 'Yamaha', model: 'MT-07 2023', passengers: 1, suitcases: 0 }, tariffMode: 'kilometros', fixedTariffs: {}, balance: 30.00, ratings: [5, 5, 4] },
-                { id: 'conductor6@turides.com', name: 'Maria Moto', phone: '0424-3334455', email: 'conductor6@turides.com', password: '123', role: 'conductor', available: true, vehicle: { type: 'moto', brand: 'Honda', model: 'CB190R 2022', passengers: 1, suitcases: 0 }, tariffMode: 'fijo', fixedTariffs: { defaultPrice: 15.00 }, balance: 20.00, ratings: [4, 5, 4, 5] }
-            ],
-            trips: [],
-            transactions: [],
-            rkmConfig: {
-                bankName: 'Banco de Venezuela',
-                accountNumber: '0102-0000-0000-0000-0000',
-                accountType: 'Ahorro',
-                documentType: 'V',
-                documentNumber: '00000000',
-                phone: '0412-0000000',
-                holderName: 'TuRides C.A.',
-                exchangeRate: 36.50
+db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        phone TEXT,
+        email TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        available INTEGER DEFAULT 0,
+        vehicle TEXT,
+        tariffMode TEXT,
+        fixedTariffs TEXT,
+        balance REAL DEFAULT 0,
+        ratings TEXT DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS trips (
+        id TEXT PRIMARY KEY,
+        clientId TEXT,
+        clientName TEXT,
+        clientPhone TEXT,
+        originAddress TEXT,
+        destinationAddress TEXT,
+        distance REAL,
+        conductorId TEXT,
+        conductorName TEXT,
+        conductorPhone TEXT,
+        conductorVehicle TEXT,
+        price REAL,
+        paymentMethod TEXT,
+        status TEXT DEFAULT 'pendiente',
+        paymentStatus TEXT,
+        clientRating INTEGER,
+        conductorRating INTEGER,
+        clientRatingAt TEXT,
+        conductorRatingAt TEXT,
+        createdAt TEXT,
+        completedAt TEXT,
+        paymentVerifiedAt TEXT
+    );
+    CREATE TABLE IF NOT EXISTS transactions (
+        id TEXT PRIMARY KEY,
+        tripId TEXT,
+        clientId TEXT,
+        conductorId TEXT,
+        amount REAL,
+        method TEXT,
+        status TEXT,
+        reference TEXT,
+        phone TEXT,
+        bankCode TEXT,
+        createdAt TEXT
+    );
+    CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+`);
+
+const SEED_USERS = [
+    { id: 'admin@turides.com', name: 'Administrador TuRides', email: 'admin@turides.com', password: '123', role: 'admin', balance: 0, ratings: '[]' },
+    { id: 'cliente1@gmail.com', name: 'Carlos Mendoza', phone: '0412-5551234', email: 'cliente1@gmail.com', password: '123', role: 'cliente', balance: 250.00, ratings: '[]' },
+    { id: 'cliente2@gmail.com', name: 'Ana Gomez', phone: '0424-9998877', email: 'cliente2@gmail.com', password: '123', role: 'cliente', balance: 300.00, ratings: '[]' },
+    { id: 'conductor1@turides.com', name: 'Pedro Infante', phone: '0414-1112233', email: 'conductor1@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Toyota', model: 'Corolla 2018', passengers: 4, suitcases: 3 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 35.00 }), balance: 45.00, ratings: JSON.stringify([5, 4, 5, 5, 4]) },
+    { id: 'conductor3@turides.com', name: 'Maria Gabriela', phone: '0424-7773322', email: 'conductor3@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Ford', model: 'Explorer SUV 2020', passengers: 6, suitcases: 5 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 55.00 }), balance: 150.00, ratings: JSON.stringify([5, 5, 4, 5, 5, 5]) },
+    { id: 'conductor2@turides.com', name: 'Juan Herrera', phone: '0416-4445566', email: 'conductor2@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Chevrolet', model: 'Aveo 2015', passengers: 4, suitcases: 2 }), tariffMode: 'kilometros', fixedTariffs: '{}', balance: 80.00, ratings: JSON.stringify([4, 3, 4, 5, 3]) },
+    { id: 'conductor4@turides.com', name: 'Carlos Prueba', phone: '0412-9998877', email: 'conductor4@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Hyundai', model: 'Accent 2022', passengers: 4, suitcases: 3 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 25.00 }), balance: 0.00, ratings: '[]' },
+    { id: 'conductor5@turides.com', name: 'Luis Motero', phone: '0412-5551122', email: 'conductor5@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'moto', brand: 'Yamaha', model: 'MT-07 2023', passengers: 1, suitcases: 0 }), tariffMode: 'kilometros', fixedTariffs: '{}', balance: 30.00, ratings: JSON.stringify([5, 5, 4]) },
+    { id: 'conductor6@turides.com', name: 'Maria Moto', phone: '0424-3334455', email: 'conductor6@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'moto', brand: 'Honda', model: 'CB190R 2022', passengers: 1, suitcases: 0 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 15.00 }), balance: 20.00, ratings: JSON.stringify([4, 5, 4, 5]) }
+];
+
+const SEED_CONFIG = {
+    bankName: 'Banco de Venezuela',
+    accountNumber: '0102-0000-0000-0000-0000',
+    accountType: 'Ahorro',
+    documentType: 'V',
+    documentNumber: '00000000',
+    phone: '0412-0000000',
+    holderName: 'TuRides C.A.',
+    exchangeRate: '36.50'
+};
+
+function seedDB() {
+    const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+    if (count === 0) {
+        const insertUser = db.prepare('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffMode, fixedTariffs, balance, ratings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        const insertMany = db.transaction((users) => {
+            for (const u of users) {
+                insertUser.run(u.id, u.name, u.phone || null, u.email, u.password, u.role, u.available || 0, u.vehicle || null, u.tariffMode || null, u.fixedTariffs || null, u.balance || 0, u.ratings || '[]');
             }
-        };
-        fs.writeFileSync(DB_FILE, JSON.stringify(seed, null, 2));
-        return seed;
+        });
+        insertMany(SEED_USERS);
+        const insertConfig = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
+        for (const [k, v] of Object.entries(SEED_CONFIG)) {
+            insertConfig.run(k, v);
+        }
+        console.log('Database seeded.');
     }
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+seedDB();
+
+function parseUser(row) {
+    if (!row) return null;
+    const { password, ...safe } = row;
+    safe.available = !!safe.available;
+    if (safe.vehicle) safe.vehicle = JSON.parse(safe.vehicle);
+    if (safe.fixedTariffs) safe.fixedTariffs = JSON.parse(safe.fixedTariffs);
+    if (safe.ratings) safe.ratings = JSON.parse(safe.ratings);
+    return safe;
 }
 
-function saveDB(data) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+function parseTrip(row) {
+    if (!row) return null;
+    row.clientRating = row.clientRating || null;
+    row.conductorRating = row.conductorRating || null;
+    return row;
 }
 
 const KILOMETER_RATE = {
@@ -63,237 +146,219 @@ const KILOMETER_RATE = {
 // === AUTH ===
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
-    const db = loadDB();
-    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-    if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' });
-    const { password: _, ...safeUser } = user;
-    res.json(safeUser);
+    const row = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email.toLowerCase(), password);
+    if (!row) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    res.json(parseUser(row));
 });
 
 app.post('/api/register', (req, res) => {
     const { name, phone, email, password, role, vehicleData } = req.body;
-    const db = loadDB();
-    if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-        return res.status(400).json({ error: 'El correo ya esta registrado' });
-    }
-    const newUser = { id: email, name, phone, email, password, role, balance: 0, ratings: [] };
-    if (role === 'conductor' && vehicleData) {
-        newUser.available = false;
-        newUser.vehicle = { type: vehicleData.type || 'carro', brand: vehicleData.brand, model: vehicleData.model, passengers: parseInt(vehicleData.passengers) || 4, suitcases: parseInt(vehicleData.suitcases) || 2 };
-        newUser.tariffMode = vehicleData.tariffMode || 'kilometros';
-        newUser.fixedTariffs = { defaultPrice: 20.00 };
-    }
-    db.users.push(newUser);
-    saveDB(db);
-    const { password: _, ...safeUser } = newUser;
-    io.emit('user:created', safeUser);
-    res.json(safeUser);
+    const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+    if (exists) return res.status(400).json({ error: 'El correo ya esta registrado' });
+    const vehicle = role === 'conductor' && vehicleData ? JSON.stringify({ type: vehicleData.type || 'carro', brand: vehicleData.brand, model: vehicleData.model, passengers: parseInt(vehicleData.passengers) || 4, suitcases: parseInt(vehicleData.suitcases) || 2 }) : null;
+    const tariffMode = role === 'conductor' ? (vehicleData?.tariffMode || 'kilometros') : null;
+    const fixedTariffs = role === 'conductor' ? JSON.stringify({ defaultPrice: 20.00 }) : null;
+    db.prepare('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffMode, fixedTariffs, balance, ratings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)').run(email, name, phone, email.toLowerCase(), password, role, 0, vehicle, tariffMode, fixedTariffs, '[]');
+    const user = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(email));
+    io.emit('user:created', user);
+    res.json(user);
 });
 
 // === USERS ===
 app.get('/api/users', (req, res) => {
-    const db = loadDB();
-    const safe = db.users.map(({ password, ...u }) => u);
-    res.json(safe);
+    const rows = db.prepare('SELECT * FROM users').all();
+    res.json(rows.map(parseUser));
 });
 
 app.get('/api/users/:id', (req, res) => {
-    const db = loadDB();
-    const user = db.users.find(u => u.id === req.params.id);
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    const { password, ...safeUser } = user;
-    res.json(safeUser);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json(parseUser(row));
 });
 
 app.put('/api/users/:id', (req, res) => {
-    const db = loadDB();
-    const idx = db.users.findIndex(u => u.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Usuario no encontrado' });
-    Object.assign(db.users[idx], req.body);
-    saveDB(db);
-    const { password, ...safeUser } = db.users[idx];
-    io.emit('user:updated', safeUser);
-    res.json(safeUser);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const updates = req.body;
+    if (updates.vehicle && typeof updates.vehicle === 'object') updates.vehicle = JSON.stringify(updates.vehicle);
+    if (updates.fixedTariffs && typeof updates.fixedTariffs === 'object') updates.fixedTariffs = JSON.stringify(updates.fixedTariffs);
+    if (updates.ratings && Array.isArray(updates.ratings)) updates.ratings = JSON.stringify(updates.ratings);
+    if (updates.available !== undefined) updates.available = updates.available ? 1 : 0;
+    const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'password');
+    if (fields.length === 0) return res.json(parseUser(row));
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => updates[f]);
+    db.prepare(`UPDATE users SET ${setClause} WHERE id = ?`).run(...values, req.params.id);
+    const updated = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id));
+    io.emit('user:updated', updated);
+    res.json(updated);
 });
 
 // === AVAILABLE CONDUCTORS ===
 app.get('/api/conductors/available', (req, res) => {
-    const db = loadDB();
     const distance = parseFloat(req.query.distance) || 10;
     const vehicleType = req.query.vehicleType || 'carro';
-    const conductors = db.users.filter(u => u.role === 'conductor' && u.available === true && u.vehicle?.type === vehicleType).map(c => {
+    const rows = db.prepare('SELECT * FROM users WHERE role = ? AND available = 1').all('conductor');
+    const conductors = rows.filter(c => {
+        const v = JSON.parse(c.vehicle || '{}');
+        return v.type === vehicleType;
+    }).map(c => {
+        const vehicle = JSON.parse(c.vehicle || '{}');
+        const fixedTariffs = JSON.parse(c.fixedTariffs || '{}');
+        const ratings = JSON.parse(c.ratings || '[]');
         let price = 0;
-        const rates = KILOMETER_RATE[c.vehicle.type] || KILOMETER_RATE.carro;
+        const rates = KILOMETER_RATE[vehicle.type] || KILOMETER_RATE.carro;
         if (c.tariffMode === 'fijo') {
-            price = parseFloat(c.fixedTariffs.defaultPrice) || 35.00;
+            price = parseFloat(fixedTariffs.defaultPrice) || 35.00;
         } else {
             price = rates.base;
             if (distance > rates.minDistance) {
                 price += (distance - rates.minDistance) * rates.perKm;
             }
         }
-        const avgRating = c.ratings && c.ratings.length > 0 ? (c.ratings.reduce((a, b) => a + b, 0) / c.ratings.length).toFixed(1) : null;
-        return { ...c, calculatedPrice: parseFloat(price.toFixed(2)), avgRating, ratingCount: c.ratings?.length || 0 };
+        const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
+        return { ...parseUser(c), calculatedPrice: parseFloat(price.toFixed(2)), avgRating, ratingCount: ratings.length };
     });
     res.json(conductors);
 });
 
 // === TRIPS ===
 app.get('/api/trips', (req, res) => {
-    const db = loadDB();
-    res.json(db.trips);
+    const rows = db.prepare('SELECT * FROM trips ORDER BY createdAt DESC').all();
+    res.json(rows.map(parseTrip));
 });
 
 app.post('/api/trips', (req, res) => {
-    const db = loadDB();
     const { clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, price, paymentMethod } = req.body;
-    const conductor = db.users.find(u => u.id === conductorId);
+    const conductor = db.prepare('SELECT * FROM users WHERE id = ?').get(conductorId);
     if (!conductor) return res.status(404).json({ error: 'Conductor no encontrado' });
-    const newTrip = {
-        id: 'TRIP_' + Date.now(),
-        clientId, clientName, clientPhone,
-        originAddress, destinationAddress, distance: parseFloat(distance),
-        conductorId: conductor.id, conductorName: conductor.name, conductorPhone: conductor.phone,
-        conductorVehicle: `${conductor.vehicle.brand} ${conductor.vehicle.model}`,
-        price: parseFloat(price), paymentMethod,
-        status: 'pendiente',
-        createdAt: new Date().toISOString()
-    };
-    db.trips.push(newTrip);
-    saveDB(db);
-    io.emit('trip:created', newTrip);
-    io.to('conductor_' + conductorId).emit('trip:new_request', newTrip);
-    res.json(newTrip);
+    const vehicle = JSON.parse(conductor.vehicle || '{}');
+    const id = 'TRIP_' + Date.now();
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO trips (id, clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, conductorName, conductorPhone, conductorVehicle, price, paymentMethod, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, parseFloat(price), paymentMethod, 'pendiente', now);
+    const trip = parseTrip(db.prepare('SELECT * FROM trips WHERE id = ?').get(id));
+    io.emit('trip:created', trip);
+    io.to('conductor_' + conductorId).emit('trip:new_request', trip);
+    res.json(trip);
 });
 
 app.put('/api/trips/:id/status', (req, res) => {
-    const db = loadDB();
-    const idx = db.trips.findIndex(t => t.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Viaje no encontrado' });
+    const trip = db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id);
+    if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { status } = req.body;
-    db.trips[idx].status = status;
-    if (status === 'completado') db.trips[idx].completedAt = new Date().toISOString();
-    if (status === 'pago_verificado') db.trips[idx].paymentVerifiedAt = new Date().toISOString();
-    if (status === 'calificado') {
-        db.trips[idx].status = 'calificado';
-        const condIdx = db.users.findIndex(u => u.id === db.trips[idx].conductorId);
-        if (condIdx !== -1) db.users[condIdx].available = true;
+    const now = new Date().toISOString();
+    if (status === 'completado') {
+        db.prepare('UPDATE trips SET status = ?, completedAt = ? WHERE id = ?').run(status, now, req.params.id);
+    } else if (status === 'pago_verificado') {
+        db.prepare('UPDATE trips SET status = ?, paymentVerifiedAt = ? WHERE id = ?').run(status, now, req.params.id);
+    } else if (status === 'aceptado') {
+        db.prepare('UPDATE trips SET status = ? WHERE id = ?').run(status, req.params.id);
+        db.prepare('UPDATE users SET available = 0 WHERE id = ?').run(trip.conductorId);
+    } else if (status === 'calificado') {
+        db.prepare('UPDATE trips SET status = ? WHERE id = ?').run(status, req.params.id);
+        db.prepare('UPDATE users SET available = 1 WHERE id = ?').run(trip.conductorId);
+    } else {
+        db.prepare('UPDATE trips SET status = ? WHERE id = ?').run(status, req.params.id);
     }
-    if (status === 'aceptado') {
-        const condIdx = db.users.findIndex(u => u.id === db.trips[idx].conductorId);
-        if (condIdx !== -1) db.users[condIdx].available = false;
-    }
-    saveDB(db);
-    const trip = db.trips[idx];
-    io.emit('trip:status_changed', trip);
-    io.to('client_' + trip.clientId).emit('trip:status_changed', trip);
-    io.to('conductor_' + trip.conductorId).emit('trip:status_changed', trip);
-    res.json(trip);
+    const updated = parseTrip(db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id));
+    io.emit('trip:status_changed', updated);
+    io.to('client_' + updated.clientId).emit('trip:status_changed', updated);
+    io.to('conductor_' + updated.conductorId).emit('trip:status_changed', updated);
+    res.json(updated);
 });
 
 app.put('/api/trips/:id/rating', (req, res) => {
-    const db = loadDB();
-    const idx = db.trips.findIndex(t => t.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Viaje no encontrado' });
+    const trip = db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id);
+    if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { field, value } = req.body;
-    db.trips[idx][field] = value;
-    db.trips[idx][field + 'At'] = new Date().toISOString();
-
+    const now = new Date().toISOString();
+    db.prepare(`UPDATE trips SET ${field} = ?, ${field}At = ? WHERE id = ?`).run(value, now, req.params.id);
     const userField = field === 'clientRating' ? 'clientId' : 'conductorId';
-    const userId = db.trips[idx][userField];
-    const userIdx = db.users.findIndex(u => u.id === userId);
-    if (userIdx !== -1) {
-        if (!db.users[userIdx].ratings) db.users[userIdx].ratings = [];
-        db.users[userIdx].ratings.push(value);
+    const userId = trip[userField];
+    const user = db.prepare('SELECT ratings FROM users WHERE id = ?').get(userId);
+    if (user) {
+        const ratings = JSON.parse(user.ratings || '[]');
+        ratings.push(value);
+        db.prepare('UPDATE users SET ratings = ? WHERE id = ?').run(JSON.stringify(ratings), userId);
     }
-
-    const bothRated = db.trips[idx].clientRating && db.trips[idx].conductorRating;
-    if (bothRated) {
-        db.trips[idx].status = 'calificado';
-        const condIdx = db.users.findIndex(u => u.id === db.trips[idx].conductorId);
-        if (condIdx !== -1) db.users[condIdx].available = true;
+    const updatedTrip = db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id);
+    if (updatedTrip.clientRating && updatedTrip.conductorRating) {
+        db.prepare('UPDATE trips SET status = ? WHERE id = ?').run('calificado', req.params.id);
+        db.prepare('UPDATE users SET available = 1 WHERE id = ?').run(updatedTrip.conductorId);
     }
-    saveDB(db);
-    const trip = db.trips[idx];
-    io.emit('trip:rated', trip);
-    io.to('client_' + trip.clientId).emit('trip:rated', trip);
-    io.to('conductor_' + trip.conductorId).emit('trip:rated', trip);
-    res.json(trip);
+    const final = parseTrip(db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id));
+    io.emit('trip:rated', final);
+    io.to('client_' + final.clientId).emit('trip:rated', final);
+    io.to('conductor_' + final.conductorId).emit('trip:rated', final);
+    res.json(final);
 });
 
 // === PAYMENTS ===
 app.get('/api/rkm-config', (req, res) => {
-    const db = loadDB();
-    res.json(db.rkmConfig);
+    const rows = db.prepare('SELECT * FROM config').all();
+    const config = {};
+    rows.forEach(r => { config[r.key] = r.value; });
+    res.json(config);
 });
 
 app.post('/api/payments/rkm', (req, res) => {
-    const db = loadDB();
     const { tripId } = req.body;
-    const tripIdx = db.trips.findIndex(t => t.id === tripId);
-    if (tripIdx === -1) return res.status(404).json({ error: 'Viaje no encontrado' });
-    const trip = db.trips[tripIdx];
-    const clientIdx = db.users.findIndex(u => u.id === trip.clientId);
-    if (clientIdx === -1) return res.status(404).json({ error: 'Cliente no encontrado' });
-    if (db.users[clientIdx].balance < trip.price) return res.status(400).json({ error: 'Saldo insuficiente' });
-    db.users[clientIdx].balance = parseFloat((db.users[clientIdx].balance - trip.price).toFixed(2));
-    const condIdx = db.users.findIndex(u => u.id === trip.conductorId);
-    if (condIdx !== -1) db.users[condIdx].balance = parseFloat((db.users[condIdx].balance + trip.price).toFixed(2));
-    db.transactions.push({ id: 'TXN_' + Date.now(), tripId, clientId: trip.clientId, conductorId: trip.conductorId, amount: trip.price, method: 'rkm', status: 'completado', createdAt: new Date().toISOString() });
-    trip.paymentStatus = 'pagado';
-    trip.status = 'completado';
-    trip.completedAt = new Date().toISOString();
-    saveDB(db);
+    const trip = db.prepare('SELECT * FROM trips WHERE id = ?').get(tripId);
+    if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+    const client = db.prepare('SELECT * FROM users WHERE id = ?').get(trip.clientId);
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+    if (client.balance < trip.price) return res.status(400).json({ error: 'Saldo insuficiente' });
+    const newClientBalance = parseFloat((client.balance - trip.price).toFixed(2));
+    db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(newClientBalance, trip.clientId);
+    const conductor = db.prepare('SELECT * FROM users WHERE id = ?').get(trip.conductorId);
+    if (conductor) {
+        const newCondBalance = parseFloat((conductor.balance + trip.price).toFixed(2));
+        db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(newCondBalance, trip.conductorId);
+    }
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO transactions (id, tripId, clientId, conductorId, amount, method, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('TXN_' + Date.now(), tripId, trip.clientId, trip.conductorId, trip.price, 'rkm', 'completado', now);
+    db.prepare('UPDATE trips SET paymentStatus = ?, status = ?, completedAt = ? WHERE id = ?').run('pagado', 'completado', now, tripId);
     io.emit('payment:completed', { tripId, method: 'rkm' });
-    io.to('client_' + trip.clientId).emit('user:updated', { ...db.users[clientIdx], password: undefined });
-    io.to('conductor_' + trip.conductorId).emit('user:updated', { ...db.users[condIdx], password: undefined });
+    const updatedClient = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(trip.clientId));
+    const updatedConductor = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(trip.conductorId));
+    io.to('client_' + trip.clientId).emit('user:updated', updatedClient);
+    io.to('conductor_' + trip.conductorId).emit('user:updated', updatedConductor);
     res.json({ success: true });
 });
 
 app.post('/api/payments/pago_movil', (req, res) => {
-    const db = loadDB();
     const { tripId, phone, bankCode, reference } = req.body;
-    const tripIdx = db.trips.findIndex(t => t.id === tripId);
-    if (tripIdx === -1) return res.status(404).json({ error: 'Viaje no encontrado' });
-    const trip = db.trips[tripIdx];
-    db.transactions.push({ id: 'TXN_' + Date.now(), tripId, clientId: trip.clientId, conductorId: trip.conductorId, amount: trip.price, method: 'pago_movil', status: 'completado', reference, phone, bankCode, createdAt: new Date().toISOString() });
-    trip.paymentStatus = 'pagado';
-    trip.status = 'completado';
-    trip.completedAt = new Date().toISOString();
-    saveDB(db);
+    const trip = db.prepare('SELECT * FROM trips WHERE id = ?').get(tripId);
+    if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO transactions (id, tripId, clientId, conductorId, amount, method, status, reference, phone, bankCode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('TXN_' + Date.now(), tripId, trip.clientId, trip.conductorId, trip.price, 'pago_movil', 'completado', reference, phone, bankCode, now);
+    db.prepare('UPDATE trips SET paymentStatus = ?, status = ?, completedAt = ? WHERE id = ?').run('pagado', 'completado', now, tripId);
     io.emit('payment:completed', { tripId, method: 'pago_movil' });
     res.json({ success: true });
 });
 
 app.post('/api/rkm/recharge', (req, res) => {
-    const db = loadDB();
     const { userId, amount } = req.body;
-    const idx = db.users.findIndex(u => u.id === userId);
-    if (idx === -1) return res.status(404).json({ error: 'Usuario no encontrado' });
-    db.users[idx].balance = parseFloat((db.users[idx].balance + amount).toFixed(2));
-    saveDB(db);
-    const { password, ...safeUser } = db.users[idx];
-    io.to('client_' + userId).emit('user:updated', safeUser);
-    res.json(safeUser);
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const newBalance = parseFloat((user.balance + amount).toFixed(2));
+    db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(newBalance, userId);
+    const updated = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId));
+    io.to('client_' + userId).emit('user:updated', updated);
+    res.json(updated);
 });
 
 // === TRANSACTIONS ===
 app.get('/api/transactions', (req, res) => {
-    const db = loadDB();
-    res.json(db.transactions);
+    const rows = db.prepare('SELECT * FROM transactions ORDER BY createdAt DESC').all();
+    res.json(rows);
 });
 
 // === SOCKET.IO ===
 io.on('connection', (socket) => {
     console.log('Connected:', socket.id);
-
-    socket.on('join', (room) => {
-        socket.join(room);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Disconnected:', socket.id);
-    });
+    socket.on('join', (room) => { socket.join(room); });
+    socket.on('disconnect', () => { console.log('Disconnected:', socket.id); });
 });
 
 const PORT = process.env.PORT || 3000;
