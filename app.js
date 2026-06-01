@@ -719,10 +719,14 @@ const App = {
     },
 
     async renderAdminDashboard() {
-        const [trips, users, transactions, config, recharges, withdrawals] = await Promise.all([
-            API.get('/api/trips'), API.get('/api/users'), API.get('/api/transactions'),
-            API.get('/api/config'), API.get('/api/wallet/recharges'), API.get('/api/wallet/withdrawals')
-        ]);
+        let trips = [], users = [], transactions = [], config = {}, recharges = [], withdrawals = [];
+        try {
+            [trips, users, transactions, config, recharges, withdrawals] = await Promise.all([
+                API.get('/api/trips'), API.get('/api/users'), API.get('/api/transactions'),
+                API.get('/api/config'), API.get('/api/wallet/recharges').catch(() => []),
+                API.get('/api/wallet/withdrawals').catch(() => [])
+            ]);
+        } catch(e) { this.showToast('Error cargando datos admin.', 'error'); return; }
         const completed = trips.filter(t => ['completado', 'calificado'].includes(t.status));
         const volume = completed.reduce((acc, t) => acc + t.price, 0);
         const pendingRecharges = recharges.filter(r => r.status === 'pendiente').length;
@@ -765,7 +769,7 @@ const App = {
             }
         }
 
-        this.renderAdminSupport(recharges, withdrawals);
+        try { this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
     },
 
     renderAdminSupport(recharges, withdrawals) {
