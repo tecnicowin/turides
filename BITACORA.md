@@ -1,0 +1,289 @@
+# TuRides - Log de Cambios y Estado del Proyecto
+
+## Estado Actual
+- **Version**: 1.3.0
+- **Ultimo commit**: b695529
+- **GitHub**: https://github.com/tecnicowin/turides
+- **Deploy**: https://turides.onrender.com
+- **Fecha**: 2026-06-01
+
+## Archivos Principales
+- `server.js` - Backend Express + Socket.io + better-sqlite3
+- `app.js` - Frontend SPA (logica cliente, conductor, admin)
+- `index.html` - Todas las vistas HTML
+- `style.css` - Estilos completos (dark theme glassmorphism)
+- `package.json` - Dependencias
+- `render.yaml` - Config deploy Render
+- `turides.db` - Base de datos SQLite (generada en runtime)
+
+## Cuentas Demo (Password: 123)
+- Admin: admin@turides.com
+- Cliente 1: cliente1@gmail.com
+- Cliente 2: cliente2@gmail.com
+- Conductor Carro (Fija): conductor1@turides.com
+- Conductor Carro (Km): conductor2@turides.com
+- Conductor Carro (Fija): conductor3@turides.com
+- Conductor Carro (Fija): conductor4@turides.com
+- Conductor Moto (Km): conductor5@turides.com
+- Conductor Moto (Fija): conductor6@turides.com
+
+---
+
+## Changelog Completo
+
+### v1.3.0 - 2026-06-01
+
+#### Fix: Panel de Soporte Admin (commit b695529)
+- `Promise.all` fallaba completamente si cualquiera de las 6 llamadas API fallaba
+- Agregado `.catch(() => [])` individual a `/api/wallet/recharges` y `/api/wallet/withdrawals`
+- Agregado try/catch general en `renderAdminDashboard`
+- Agregado try/catch en `renderAdminSupport`
+- Resultado: el dashboard admin ahora se renderiza aunque una API falle
+
+#### Fix: Boton Cancelar y Logout (commit ce9cf5e)
+- **Bug critico**: `stopPendingTimer()` era llamada 4 veces pero NUNCA fue definida en el rewrite del app.js
+- Esto causaba TypeError que rompia `cancelTrip()` y `logout()`
+- Solucion: Agregada la funcion `stopPendingTimer()` completa
+- `cancelTrip()` ahora es `async` y hace `await` al API call antes de refrescar la vista
+
+#### Fix: Sintaxis JS que impedia login (commit 6629663)
+- Faltaban comillas de cierre en dos objetos `fareLabels` en lineas 343 y 427
+- `' (Noche +20%)` -> `' (Noche +20%)'`
+- Esto causaba que el JS entero no cargara, impidiendo TODO: login, logout, cancelar, aceptar viajes
+
+### v1.2.0 - 2026-06-01
+
+#### Feature: Tarifas Dinamicas por Horario
+- Hora Pico (7-9am, 5-7pm): +30% multiplicador
+- Noche (10pm-5am): +20% multiplicador
+- Diurna/Normal: sin recargo
+- Indicador visual en navbar y busqueda de conductores
+- Label "Tarifa Normal/Diurna/Hora Pico/Noche" en header de busqueda
+
+#### Feature: Precios en Bs (Bolivares)
+- Todos los montos muestran USD + Bs (tasa BCV)
+- Tasa BCV guardada en tabla `config` de SQLite
+- Admin actualiza diariamente desde panel
+- `toBs(usd)` calcula conversion en toda la app
+
+#### Feature: Recarga de Billetera (Cliente)
+- Seccion "Configuracion & Billetera" en dashboard cliente
+- Muestra datos Pago Movil de TuRides para transferir
+- Cliente envia solicitud: monto, banco, referencia, telefono
+- Solicitud queda en tabla `recharges` con status "pendiente"
+- Admin aprueba/rechaza desde panel de soporte
+- Al aprobarse, saldo se acredita automaticamente
+
+#### Feature: Retiro de Billetera (Conductor)
+- Vista de billetera con saldo disponible en $ y Bs
+- Muestra cuenta bancaria registrada
+- Boton para solicitar retiro a cuenta bancaria
+- Solicitud en tabla `withdrawals` con status "pendiente"
+- Admin aprueba/rechaza desde panel de soporte
+- Si se rechaza, el saldo se devuelve al conductor
+
+#### Feature: Panel de Soporte Admin
+- Control de recargas de clientes (aprobar/rechazar)
+- Control de retiros de conductores (aprobar/rechazar)
+- Badge con cantidad de pendientes
+- Tablas con historial completo
+
+#### Feature: Tasa BCV Admin
+- Input para actualizar tasa BCV (Bs por $1 USD)
+- Se aplica a todas las transacciones de la plataforma
+- Ultima actualizacion visible
+
+#### Fix: Tarifas Moto Corregidas
+- minDistance: 2.5km (antes 2.0km)
+- perKm: $0.45 (antes $0.50)
+- Base: $2.00 (sin cambio)
+- Ahora consistente con tabla de Tarifas.txt
+
+#### DB Changes
+- Nuevas tablas: `recharges`, `withdrawals`
+- Nueva columna `bankInfo` en tabla `users`
+- Nuevas columnas en `trips`: `priceBs`, `fareMultiplier`, `farePeriod`
+- Nueva columna en `transactions`: `amountBs`
+- Migraciones automaticas con ALTER TABLE + try/catch
+
+### v1.1.0 - 2026-05-31
+
+#### Fix: Botones de seleccion no se resaltaban
+- Botones de Moto, Pago Movil y tipo de vehiculo no mostraban estado "selected"
+- Agregados event listeners para togglear clase `selected` en radio buttons
+
+#### Fix: SQLite para Render
+- Migrado de db.json (ephemeral) a better-sqlite3 (persiste en memoria)
+- WAL mode habilitado
+- Datos seed con 9 usuarios (1 admin, 2 clientes, 6 conductores)
+- Tabla `config` con datos de cuenta TuRides
+
+### v1.0.0 - 2026-05-30
+
+#### Feature: App Base TuRides
+- Login/Register para cliente, conductor, admin
+- Busqueda de conductores por tipo (carro/moto)
+- Sistema de contratacion con estados
+- Pago por RKM wallet o Pago Movil
+- Calificacion bidireccional estrellas 1-5
+- Dashboard admin con estadisticas
+- Socket.io para sync en tiempo real
+- Conductor polling cada 3s como fallback
+- CSS dark theme glassmorphism mobile-responsive
+
+---
+
+## Estructura de Base de Datos
+
+### Tabla `users`
+```
+id TEXT PK, name TEXT, phone TEXT, email TEXT UNIQUE, password TEXT,
+role TEXT, available INTEGER, vehicle TEXT, tariffMode TEXT,
+fixedTariffs TEXT, balance REAL, ratings TEXT, bankInfo TEXT
+```
+
+### Tabla `trips`
+```
+id TEXT PK, clientId TEXT, clientName TEXT, clientPhone TEXT,
+originAddress TEXT, destinationAddress TEXT, distance REAL,
+conductorId TEXT, conductorName TEXT, conductorPhone TEXT, conductorVehicle TEXT,
+price REAL, priceBs REAL, paymentMethod TEXT, status TEXT,
+paymentStatus TEXT, clientRating INTEGER, conductorRating INTEGER,
+clientRatingAt TEXT, conductorRatingAt TEXT, createdAt TEXT,
+completedAt TEXT, paymentVerifiedAt TEXT, fareMultiplier REAL, farePeriod TEXT
+```
+
+### Tabla `transactions`
+```
+id TEXT PK, tripId TEXT, clientId TEXT, conductorId TEXT,
+amount REAL, amountBs REAL, method TEXT, status TEXT,
+reference TEXT, phone TEXT, bankCode TEXT, createdAt TEXT
+```
+
+### Tabla `recharges`
+```
+id TEXT PK, userId TEXT, userName TEXT, amount REAL, amountBs REAL,
+phone TEXT, bankCode TEXT, reference TEXT, status TEXT,
+adminNote TEXT, createdAt TEXT, reviewedAt TEXT
+```
+
+### Tabla `withdrawals`
+```
+id TEXT PK, conductorId TEXT, conductorName TEXT, amount REAL, amountBs REAL,
+bankInfo TEXT, status TEXT, adminNote TEXT, createdAt TEXT, reviewedAt TEXT
+```
+
+### Tabla `config`
+```
+key TEXT PK, value TEXT
+```
+Keys: bankName, accountNumber, accountType, documentType, documentNumber,
+phone, holderName, bcvRate, bcvLastUpdate
+
+---
+
+## Tarifas Configuradas (Tarifas.txt)
+
+| Distancia | Moto | Carro |
+|-----------|------|-------|
+| Minima (0-2.5km) | $1.50-$2.00 | $3.50-$4.00 |
+| Corto (~5km) | $2.50-$3.50 | $5.50-$6.50 |
+| Medio (~10km) | $4.50-$6.00 | $9.00-$11.00 |
+| Largo (~15km) | $7.00-$9.00 | $13.00-$16.00 |
+
+**Costo por km**: Moto $0.40-$0.50 | Carro $0.80-$1.00
+
+**Multiplicadores por horario**:
+- Hora Pico (7-9am, 5-7pm): +30%
+- Noche (10pm-5am): +20%
+
+---
+
+## Endpoints API
+
+### Auth
+- POST /api/login
+- POST /api/register
+
+### Users
+- GET /api/users
+- GET /api/users/:id
+- PUT /api/users/:id
+
+### Conductors
+- GET /api/conductors/available?distance=&vehicleType=
+
+### Trips
+- GET /api/trips
+- POST /api/trips
+- PUT /api/trips/:id/status
+- PUT /api/trips/:id/rating
+
+### Config
+- GET /api/config
+- PUT /api/config
+- GET /api/rkm-config
+- GET /api/fare-info
+
+### Payments
+- POST /api/payments/rkm
+- POST /api/payments/pago_movil
+- POST /api/rkm/recharge (instant - old flow)
+
+### Wallet (nuevo)
+- POST /api/wallet/recharge (solicitud con admin approval)
+- GET /api/wallet/recharges
+- PUT /api/wallet/recharges/:id
+- POST /api/wallet/withdraw
+- GET /api/wallet/withdrawals
+- PUT /api/wallet/withdrawals/:id
+
+### Transactions
+- GET /api/transactions
+
+### Socket.io Events
+- trip:created, trip:new_request, trip:status_changed, trip:rated
+- payment:completed, user:updated, user:created
+- config:updated, recharge:created, recharge:approved, recharge:updated
+- withdrawal:created, withdrawal:approved, withdrawal:rejected
+
+---
+
+## Pendientes / TODO
+
+### Funcionalidad
+- [ ] Integrar mapa real (Google Maps / Mapbox) para calcular distancia real
+- [ ] Notificaciones push para moviles
+- [ ] Historial detallado de viaje completado
+- [ ] Funcion "rebook" rapido para clientes
+- [ ] Chat entre cliente y conductor
+- [ ] Modo oscuro / claro toggle
+- [ ] Multi-idioma (ES/EN)
+
+### Admin
+- [ ] Admin puede deshabilitar/conductores
+- [ ] Graficos de ventas diarias/semanales
+- [ ] Exportar datos a CSV/Excel
+- [ ] Notificaciones al admin cuando hay solicitudes pendientes
+
+### Pagos
+- [ ] Validar referencias de Pago Movil automaticamente
+- [ ] Integrar pasarela de pago real
+- [ ] Historial de transacciones con filtros por fecha
+- [ ] Comprobante de pago descargable
+
+### Conductor
+- [ ] Historial de ganancias diarias/semanales
+- [ ] Calculo automatico de kilometros con GPS
+- [ ] Modo "en ruta" con ubicacion compartida
+
+### Cliente
+- [ ] Guardar direcciones frecuentes
+- [ ] Calcular ruta real con Google Maps
+- [ ] Compartir ubicacion del conductor en tiempo real
+
+### Deploy
+- [ ] Upgrade Render a plan de pago para evitar cold start
+- [ ] Configurar dominio personalizado
+- [ ] SSL/HTTPS automatico
+- [ ] Backup automatico de base de datos
