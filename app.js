@@ -231,6 +231,27 @@ const App = {
             e.preventDefault();
             this.processAutomatedSearch();
         });
+
+        document.querySelectorAll('input[name="vehicle-type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                document.querySelectorAll('input[name="vehicle-type"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
+                e.target.closest('.payment-method-option').classList.add('selected');
+            });
+        });
+
+        document.querySelectorAll('input[name="payment-method"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                document.querySelectorAll('input[name="payment-method"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
+                e.target.closest('.payment-method-option').classList.add('selected');
+            });
+        });
+
+        document.querySelectorAll('input[name="reg-vehicle-type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                document.querySelectorAll('input[name="reg-vehicle-type"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
+                e.target.closest('.payment-method-option').classList.add('selected');
+            });
+        });
     },
 
     async renderClienteDashboard() {
