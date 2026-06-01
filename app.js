@@ -539,11 +539,21 @@ const App = {
         this.renderNavbar();
     },
 
-    cancelTrip(tripId) {
+    stopPendingTimer() {
+        if (this._pendingTimerInterval) {
+            clearInterval(this._pendingTimerInterval);
+            this._pendingTimerInterval = null;
+        }
+    },
+
+    async cancelTrip(tripId) {
         this.stopPendingTimer();
-        API.put(`/api/trips/${tripId}/status`, { status: 'rechazado' });
+        await API.put(`/api/trips/${tripId}/status`, { status: 'rechazado' });
         this.showToast('Solicitud cancelada.', 'info');
-        this.updateViewContent();
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        this.renderNavbar();
+        await this.updateViewContent();
     },
 
     showAcceptanceOverlay(trip) {
