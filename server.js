@@ -30,37 +30,38 @@ const SEED_CONFIG = {
 };
 
 async function initDB() {
-    await dbExec(`CREATE TABLE IF NOT EXISTS users (
+    await dbExec(`DROP TABLE IF EXISTS users, trips, transactions, config, recharges, withdrawals CASCADE`);
+    await dbExec(`CREATE TABLE users (
         id TEXT PRIMARY KEY, name TEXT, phone TEXT, email TEXT UNIQUE, password TEXT,
-        role TEXT, available INTEGER DEFAULT 0, vehicle TEXT, tariffMode TEXT,
-        fixedTariffs TEXT, balance REAL DEFAULT 0, bankInfo TEXT, ratings TEXT DEFAULT '[]',
-        twoFactorSecret TEXT, twoFactorEnabled INTEGER DEFAULT 0, passwordChanged INTEGER DEFAULT 0
+        role TEXT, available INTEGER DEFAULT 0, vehicle TEXT, "tariffMode" TEXT,
+        "fixedTariffs" TEXT, balance REAL DEFAULT 0, "bankInfo" TEXT, ratings TEXT DEFAULT '[]',
+        "twoFactorSecret" TEXT, "twoFactorEnabled" INTEGER DEFAULT 0, "passwordChanged" INTEGER DEFAULT 0
     )`);
-    await dbExec(`CREATE TABLE IF NOT EXISTS trips (
-        id TEXT PRIMARY KEY, clientId TEXT, clientName TEXT, clientPhone TEXT,
-        originAddress TEXT, destinationAddress TEXT, distance REAL,
-        conductorId TEXT, conductorName TEXT, conductorPhone TEXT, conductorVehicle TEXT,
-        price REAL, priceBs REAL, paymentMethod TEXT, status TEXT DEFAULT 'pendiente',
-        paymentStatus TEXT, clientRating INTEGER, conductorRating INTEGER,
-        clientRatingAt TEXT, conductorRatingAt TEXT, createdAt TEXT, completedAt TEXT,
-        paymentVerifiedAt TEXT, fareMultiplier REAL DEFAULT 1.0, farePeriod TEXT DEFAULT 'normal'
+    await dbExec(`CREATE TABLE trips (
+        id TEXT PRIMARY KEY, "clientId" TEXT, "clientName" TEXT, "clientPhone" TEXT,
+        "originAddress" TEXT, "destinationAddress" TEXT, distance REAL,
+        "conductorId" TEXT, "conductorName" TEXT, "conductorPhone" TEXT, "conductorVehicle" TEXT,
+        price REAL, "priceBs" REAL, "paymentMethod" TEXT, status TEXT DEFAULT 'pendiente',
+        "paymentStatus" TEXT, "clientRating" INTEGER, "conductorRating" INTEGER,
+        "clientRatingAt" TEXT, "conductorRatingAt" TEXT, "createdAt" TEXT, "completedAt" TEXT,
+        "paymentVerifiedAt" TEXT, "fareMultiplier" REAL DEFAULT 1.0, "farePeriod" TEXT DEFAULT 'normal'
     )`);
-    await dbExec(`CREATE TABLE IF NOT EXISTS transactions (
-        id TEXT PRIMARY KEY, tripId TEXT, clientId TEXT, conductorId TEXT,
-        amount REAL, amountBs REAL, method TEXT, status TEXT,
-        reference TEXT, phone TEXT, bankCode TEXT, createdAt TEXT
+    await dbExec(`CREATE TABLE transactions (
+        id TEXT PRIMARY KEY, "tripId" TEXT, "clientId" TEXT, "conductorId" TEXT,
+        amount REAL, "amountBs" REAL, method TEXT, status TEXT,
+        reference TEXT, phone TEXT, "bankCode" TEXT, "createdAt" TEXT
     )`);
-    await dbExec(`CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)`);
-    await dbExec(`CREATE TABLE IF NOT EXISTS recharges (
-        id TEXT PRIMARY KEY, userId TEXT, userName TEXT, amount REAL, amountBs REAL,
-        phone TEXT, bankCode TEXT, reference TEXT, status TEXT DEFAULT 'pendiente',
-        adminNote TEXT, createdAt TEXT, reviewedAt TEXT
+    await dbExec(`CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)`);
+    await dbExec(`CREATE TABLE recharges (
+        id TEXT PRIMARY KEY, "userId" TEXT, "userName" TEXT, amount REAL, "amountBs" REAL,
+        phone TEXT, "bankCode" TEXT, reference TEXT, status TEXT DEFAULT 'pendiente',
+        "adminNote" TEXT, "createdAt" TEXT, "reviewedAt" TEXT
     )`);
-    await dbExec(`CREATE TABLE IF NOT EXISTS withdrawals (
-        id TEXT PRIMARY KEY, conductorId TEXT, conductorName TEXT,
-        amount REAL, amountBs REAL, commission REAL DEFAULT 0, netAmount REAL DEFAULT 0,
-        bankInfo TEXT, status TEXT DEFAULT 'pendiente', adminNote TEXT,
-        reference TEXT, createdAt TEXT, reviewedAt TEXT
+    await dbExec(`CREATE TABLE withdrawals (
+        id TEXT PRIMARY KEY, "conductorId" TEXT, "conductorName" TEXT,
+        amount REAL, "amountBs" REAL, commission REAL DEFAULT 0, "netAmount" REAL DEFAULT 0,
+        "bankInfo" TEXT, status TEXT DEFAULT 'pendiente', "adminNote" TEXT,
+        reference TEXT, "createdAt" TEXT, "reviewedAt" TEXT
     )`);
 
     const existingConfig = await dbAll('SELECT key FROM config LIMIT 1');
@@ -356,7 +357,7 @@ app.put('/api/trips/:id/rating', async (req, res) => {
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { field, value } = req.body;
     const now = new Date().toISOString();
-    await dbRun(`UPDATE trips SET ${field} = $1, "${field}At" = $2 WHERE id = $3`, [value, now, req.params.id]);
+    await dbRun(`UPDATE trips SET "${field}" = $1, "${field}At" = $2 WHERE id = $3`, [value, now, req.params.id]);
     const userField = field === 'clientRating' ? 'clientId' : 'conductorId';
     const userId = trip[userField];
     const user = await dbGet('SELECT ratings FROM users WHERE id = $1', [userId]);
