@@ -32,6 +32,19 @@ const App = {
     _twoFactorSecret: null,
 
     async init() {
+        if (window.location.search.includes('reset=true') || window.location.search.includes('fresh=true')) {
+            localStorage.clear();
+            sessionStorage.clear();
+            window.history.replaceState({}, '', window.location.pathname);
+            try { await API.post('/api/setup/reset'); } catch(e) {}
+            this._setupStatus = { hasAdmin: false, adminSetupComplete: false, totalUsers: 0 };
+            await this.loadFareInfo();
+            this.setupEventListeners();
+            this.setupSocketListeners();
+            this.showView('setup');
+            this.showToast('Sistema reiniciado. Crea tu cuenta de administrador.', 'success');
+            return;
+        }
         this._setupStatus = await API.get('/api/setup/status');
         const savedSession = localStorage.getItem('turides_session');
         if (savedSession) {
@@ -1304,6 +1317,12 @@ const App = {
         this.session = null;
         this.route();
         this.showToast('Sesion cerrada.', 'info');
+    },
+
+    hardReset() {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
     },
 
     showToast(message, type = 'info') {
