@@ -205,21 +205,18 @@ function getFarePeriod() {
     const minute = now.getMinutes();
     const timeVal = hour + minute / 60;
 
-    if ((timeVal >= 7 && timeVal < 9) || (timeVal >= 17 && timeVal < 19)) {
-        return { period: 'pico', multiplier: 1.30 };
+    if (timeVal >= 17 && timeVal < 20) {
+        return { period: 'pico', multiplier: 1.25 };
     }
     if (timeVal >= 22 || timeVal < 5) {
         return { period: 'noche', multiplier: 1.20 };
-    }
-    if (timeVal >= 9 && timeVal < 17) {
-        return { period: 'diurno', multiplier: 1.0 };
     }
     return { period: 'normal', multiplier: 1.0 };
 }
 
 const KILOMETER_RATE = {
-    carro: { base: 4.00, perKm: 0.95, minDistance: 2.5 },
-    moto: { base: 2.00, perKm: 0.45, minDistance: 2.5 }
+    carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 },
+    moto: { base: 0.80, perKm: 0.20, minDistance: 2.5 }
 };
 
 // === AUTH ===

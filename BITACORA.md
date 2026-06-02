@@ -1,11 +1,11 @@
 # TuRides - Log de Cambios y Estado del Proyecto
 
 ## Estado Actual
-- **Version**: 1.3.0
-- **Ultimo commit**: b695529
+- **Version**: 1.4.0
+- **Ultimo commit**: pendiente
 - **GitHub**: https://github.com/tecnicowin/turides
 - **Deploy**: https://turides.onrender.com
-- **Fecha**: 2026-06-01
+- **Fecha**: 2026-06-02
 
 ## Archivos Principales
 - `server.js` - Backend Express + Socket.io + better-sqlite3
@@ -30,6 +30,17 @@
 ---
 
 ## Changelog Completo
+
+### v1.4.0 - 2026-06-02
+
+#### Ajuste: Estructura de Costos Competitiva
+- **Moto**: Base $0.80 + $0.20/km (antes $2.00 + $0.45/km)
+- **Carro**: Base $1.80 + $0.50/km (antes $4.00 + $0.95/km)
+- **Hora Pico**: +25% unicamente en horario vespertino 5pm-8pm (antes era +30% en 7-9am y 5-7pm)
+- **Noche**: +20% de 10pm a 5am (sin cambio)
+- **Diurno/Normal**: Sin recargo (sin cambio)
+- Eliminado periodo "diurno" como separador, ahora solo normal/pico/noche
+- Tarifas dentro del rango competitivo del mercado Venezolano
 
 ### v1.3.0 - 2026-06-01
 
@@ -182,20 +193,26 @@ phone, holderName, bcvRate, bcvLastUpdate
 
 ---
 
-## Tarifas Configuradas (Tarifas.txt)
+## Tarifas Configuradas (v1.4.0)
 
-| Distancia | Moto | Carro |
+| Parametro | Moto | Carro |
 |-----------|------|-------|
-| Minima (0-2.5km) | $1.50-$2.00 | $3.50-$4.00 |
-| Corto (~5km) | $2.50-$3.50 | $5.50-$6.50 |
-| Medio (~10km) | $4.50-$6.00 | $9.00-$11.00 |
-| Largo (~15km) | $7.00-$9.00 | $13.00-$16.00 |
-
-**Costo por km**: Moto $0.40-$0.50 | Carro $0.80-$1.00
+| Base fija | $0.80 | $1.80 |
+| Por km | $0.20 | $0.50 |
+| Minimo (0-2.5km) | $0.80 | $1.80 |
 
 **Multiplicadores por horario**:
-- Hora Pico (7-9am, 5-7pm): +30%
-- Noche (10pm-5am): +20%
+- Normal: x1.0 (sin recargo)
+- Hora Pico Vespertina (5pm-8pm): +25% (x1.25)
+- Noche (10pm-5am): +20% (x1.20)
+
+### Ejemplos de precios
+| Distancia | Moto Normal | Moto Pico | Carro Normal | Carro Pico |
+|-----------|-------------|-----------|--------------|------------|
+| 2.5 km | $0.80 | $1.00 | $1.80 | $2.25 |
+| 5 km | $1.30 | $1.63 | $3.05 | $3.81 |
+| 10 km | $2.30 | $2.88 | $5.55 | $6.94 |
+| 15 km | $3.30 | $4.13 | $8.05 | $10.06 |
 
 ---
 
