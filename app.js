@@ -51,10 +51,6 @@ const App = {
         this.setupEventListeners();
         this.setupSocketListeners();
         this.route();
-        const resetSection = document.getElementById('admin-reset-section');
-        if (resetSection && this._setupStatus && this._setupStatus.totalUsers > 0) {
-            resetSection.style.display = 'block';
-        }
     },
 
     async loadFareInfo() {
@@ -1289,16 +1285,15 @@ const App = {
     },
 
     async adminReset() {
-        if (!confirm('¿ELIMINAR TODOS LOS DATOS?\n\nEsto eliminará todos los usuarios, viajes, transacciones y configuración.\n\n¿Estás seguro?')) return;
-        if (!confirm('ÚLTIMA ADVERTENCIA: Esta acción es irreversible.\n\n¿Realmente deseas eliminar todo?')) return;
+        if (!confirm('ELIMINAR TODOS LOS DATOS?\n\nEsto borrará todos los usuarios, viajes, transacciones y configuración.\nDespués podrás crear un nuevo administrador.\n\n¿Continuar?')) return;
         try {
             const result = await API.post('/api/setup/reset');
             if (result.success) {
                 localStorage.removeItem('turides_session');
                 this.session = null;
-                this._setupStatus = await API.get('/api/setup/status');
-                this.showToast('Todos los datos eliminados. App reiniciada.', 'success');
-                this.route();
+                this._setupStatus = { hasAdmin: false, adminSetupComplete: false, totalUsers: 0 };
+                this.showToast('Sistema reiniciado. Crea tu cuenta de administrador.', 'success');
+                this.showView('setup');
             }
         } catch(err) { this.showToast('Error al resetear.', 'error'); }
     },
