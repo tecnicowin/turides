@@ -477,8 +477,12 @@ const App = {
                 <div class="p-3 bg-dark rounded mb-4 flex justify-between items-center"><span class="text-xs text-gray">Metodo de Pago</span><span class="badge ${activeTrip.paymentMethod === 'rkm' ? 'text-emerald' : 'text-cyan'}">${paymentLabel}</span></div>`;
 
             if (activeTrip.status === 'aceptado') {
-                html += `<div class="p-3 bg-dark rounded border-l-purple mb-4"><p class="text-xs text-purple font-bold font-heading">El conductor se comunicara contigo para coordinar.</p></div>
-                <button onclick="App.completeTrip('${activeTrip.id}')" class="btn btn-emerald w-full">Finalizar Viaje y Pagar</button>`;
+                if (activeTrip.paymentMethod === 'rkm') {
+                    html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4"><p class="text-xs text-emerald font-bold font-heading">El pago se realizara automaticamente al finalizar el viaje.</p><p class="text-xs text-gray mt-1">Saldo actual: <strong>$${this.session.balance.toFixed(2)}</strong></p></div>`;
+                } else {
+                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4"><p class="text-xs text-cyan font-bold font-heading">Al llegar al destino, realizare un Pago Movil al conductor.</p><p class="text-xs text-gray mt-1">El conductor te indicara sus datos bancarios para el pago.</p></div>`;
+                }
+                html += `<button onclick="App.completeTrip('${activeTrip.id}')" class="btn btn-emerald w-full">Finalizar Viaje y Pagar</button>`;
             } else if (activeTrip.status === 'completado') {
                 html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4"><p class="text-xs text-cyan font-bold font-heading animate-pulse">El conductor esta verificando tu pago...</p></div>`;
             } else if (activeTrip.status === 'pago_verificado') {
@@ -574,10 +578,26 @@ const App = {
     },
 
     async completeTrip(tripId) {
-        this._pendingTripId = tripId;
         const trips = await API.get('/api/trips');
         const trip = trips.find(t => t.id === tripId);
         if (!trip) return;
+
+        if (trip.paymentMethod === 'rkm') {
+            if (this.session.balance < trip.price) {
+                this.showToast('Saldo insuficiente en billetera.', 'error');
+                return;
+            }
+            const result = await API.post('/api/payments/rkm', { tripId });
+            if (result.error) { this.showToast(result.error, 'error'); return; }
+            this.showToast('Pago procesado automaticamente. Saldo actualizado.', 'success');
+            this.session = await API.get(`/api/users/${this.session.id}`);
+            localStorage.setItem('turides_session', JSON.stringify(this.session));
+            this.renderNavbar();
+            this.updateViewContent();
+            return;
+        }
+
+        this._pendingTripId = tripId;
         this._pendingTripPrice = trip.price;
         this._pendingConductorId = trip.conductorId;
         document.getElementById('payment-modal-amount').textContent = `$${trip.price.toFixed(2)}`;
@@ -590,7 +610,7 @@ const App = {
         document.getElementById('pm-account-number').textContent = rkmConfig.accountNumber;
         document.getElementById('pm-holder-name').textContent = rkmConfig.holderName;
         document.getElementById('pm-document').textContent = `${rkmConfig.documentType}-${rkmConfig.documentNumber}`;
-        this.selectPaymentMethod(this._selectedPaymentMethod || 'rkm');
+        this.selectPaymentMethod('pago_movil');
         document.getElementById('payment-modal').classList.remove('hidden');
     },
 
@@ -697,18 +717,40 @@ const App = {
 
         if (activeTrip) {
             radarContainer.style.display = 'none'; activeContainer.style.display = 'block';
+            const isRKM = activeTrip.paymentMethod === 'rkm';
+            const paymentLabel = isRKM ? 'Billetera TuRides (Transferencia Interna)' : 'Pago Movil Directo';
+            const paymentColor = isRKM ? 'text-emerald' : 'text-cyan';
+            const paymentIcon = isRKM ? '💰' : '📱';
+
             let html = `<div class="glass-card"><div class="flex justify-between items-center mb-4 border-b border-gray pb-2"><h3 class="text-xl font-bold">Solicitud Entrante</h3><span class="badge ${activeTrip.status === 'aceptado' ? 'text-emerald' : 'text-cyan animate-pulse'}">${activeTrip.status.toUpperCase()}</span></div>
             <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">Datos del Solicitante:</h4><p class="text-sm"><strong>Cliente:</strong> ${activeTrip.clientName}</p><p class="text-sm"><strong>Celular:</strong> ${activeTrip.clientPhone}</p></div>
+            <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1 flex items-center gap-1">${paymentIcon} Metodo de Pago:</h4><p class="text-sm font-bold ${paymentColor}">${paymentLabel}</p>${isRKM ? '<p class="text-xs text-gray mt-1">El pago se realiza automaticamente por transferencia electronica al completar el viaje.</p>' : '<p class="text-xs text-gray mt-1">El cliente te hara un Pago Movil directo al llegar al destino. Verifica el pago en persona.</p>'}</div>
             <div class="mb-4"><h4 class="font-bold text-sm mb-1">Detalles de Ruta:</h4><p class="text-sm"><strong>Salida:</strong> ${activeTrip.originAddress}</p><p class="text-sm"><strong>Destino:</strong> ${activeTrip.destinationAddress}</p><p class="text-sm"><strong>Distancia:</strong> ${activeTrip.distance.toFixed(1)} km</p></div>
             <div class="pricing-card flex justify-between items-center mb-4"><span class="font-bold text-sm">Pago</span><div class="text-right"><span class="text-2xl font-extrabold text-emerald">$${activeTrip.price.toFixed(2)}</span><br><span class="text-xs text-gray">Bs ${this.toBs(activeTrip.price)}</span></div></div>`;
 
             if (activeTrip.status === 'pendiente') {
                 html += `<div class="flex gap-2"><button onclick="App.acceptTripByConductor('${activeTrip.id}')" class="btn btn-emerald flex-1">Aceptar Servicio</button><button onclick="App.rejectTripByConductor('${activeTrip.id}')" class="btn btn-red flex-1">Rechazar</button></div>`;
             } else if (activeTrip.status === 'aceptado') {
-                html += `<div class="p-3 bg-dark rounded border-l-purple text-center"><p class="text-xs text-emerald font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p><button onclick="App.completeTripByConductor('${activeTrip.id}')" class="btn btn-purple w-full">Completar Viaje</button></div>`;
+                if (!isRKM) {
+                    const driverBank = this.session.bankInfo || {};
+                    const hasBank = driverBank.bank && driverBank.account;
+                    html += `<div class="p-3 bg-dark rounded border-l-purple mb-3"><p class="text-xs text-emerald font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p>`;
+                    if (hasBank) {
+                        html += `<div class="p-2 bg-gray rounded mt-2"><p class="text-xs text-cyan font-bold">Comparte estos datos al cliente para el Pago Movil:</p><p class="text-sm"><strong>Banco:</strong> ${driverBank.bank}</p><p class="text-sm"><strong>Cuenta:</strong> ${driverBank.account}</p><p class="text-sm"><strong>Telefono:</strong> ${driverBank.phone || this.session.phone}</p><p class="text-sm"><strong>Titular:</strong> ${driverBank.name || this.session.name}</p></div>`;
+                    } else {
+                        html += `<p class="text-xs text-red mt-2">⚠️ No tienes cuenta bancaria configurada. Configurala en tu billetera para recibir pagos.</p>`;
+                    }
+                    html += `</div>`;
+                } else {
+                    html += `<div class="p-3 bg-dark rounded border-l-purple text-center"><p class="text-xs text-emerald font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p><p class="text-xs text-gray">El pago se transferira automaticamente al completar.</p></div>`;
+                }
+                html += `<button onclick="App.completeTripByConductor('${activeTrip.id}')" class="btn btn-purple w-full mt-3">Completar Viaje</button>`;
             } else if (activeTrip.status === 'completado') {
-                const pml = activeTrip.paymentMethod === 'rkm' ? 'Billetera RKM' : 'Pago Movil';
-                html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">Viaje completado. Verifica el pago.</p><p class="text-sm text-gray mb-3">Metodo: <strong>${pml}</strong> | Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+                if (isRKM) {
+                    html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago procesado automaticamente via Billetera TuRides.</p><p class="text-sm text-gray">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p><p class="text-xs text-gray mt-1">El saldo fue transferido del cliente a tu billetera.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+                } else {
+                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">⏳ Esperando que el cliente realice el Pago Movil.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p><p class="text-xs text-gray">Verifica el pago en persona con el cliente antes de continuar.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+                }
             } else if (activeTrip.status === 'pago_verificado') {
                 html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">Pago verificado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
             }
