@@ -67,24 +67,6 @@ const App = {
     },
 
     async init() {
-        if (window.location.search.includes('reset=true')) {
-            if (!confirm('ADVERTENCIA: Esto borrara TODOS los datos del sistema.\n\nUsuarios, viajes, transacciones y configuracion seran eliminados.\n\n¿Realmente deseas continuar?')) {
-                window.history.replaceState({}, '', window.location.pathname);
-                window.location.href = '/';
-                return;
-            }
-            try { await API.post('/api/setup/reset', { confirm: 'DELETE_ALL_DATA' }); } catch(e) {}
-            localStorage.clear();
-            sessionStorage.clear();
-            window.history.replaceState({}, '', window.location.pathname);
-            this._setupStatus = { hasAdmin: false, adminSetupComplete: false, totalUsers: 0 };
-            await this.loadFareInfo();
-            this.setupEventListeners();
-            this.setupSocketListeners();
-            this.showView('setup');
-            this.showToast('Sistema reiniciado. Crea tu cuenta de administrador.', 'success');
-            return;
-        }
         this._setupStatus = await API.get('/api/setup/status');
         const savedSession = localStorage.getItem('turides_session');
         if (savedSession) {
@@ -1554,20 +1536,6 @@ const App = {
         await API.put('/api/config', { withdrawalCommission: String(pct) });
         this.showToast(`Comision actualizada a ${pct}%.`, 'success');
         this.renderAdminDashboard();
-    },
-
-    async adminReset() {
-        if (!confirm('ELIMINAR TODOS LOS DATOS?\n\nEsto borrará todos los usuarios, viajes, transacciones y configuración.\nDespués podrás crear un nuevo administrador.\n\n¿Continuar?')) return;
-        try {
-            const result = await API.post('/api/setup/reset', { confirm: 'DELETE_ALL_DATA' });
-            if (result.success) {
-                localStorage.removeItem('turides_session');
-                this.session = null;
-                this._setupStatus = { hasAdmin: false, adminSetupComplete: false, totalUsers: 0 };
-                this.showToast('Sistema reiniciado. Crea tu cuenta de administrador.', 'success');
-                this.showView('setup');
-            }
-        } catch(err) { this.showToast('Error al resetear.', 'error'); }
     },
 
     logout() {
