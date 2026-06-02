@@ -112,18 +112,6 @@ db.exec(`
     );
 `);
 
-const SEED_USERS = [
-    { id: 'admin@turides.com', name: 'Administrador TuRides', email: 'admin@turides.com', password: '123', role: 'admin', balance: 0, ratings: '[]', bankInfo: '{}' },
-    { id: 'cliente1@gmail.com', name: 'Carlos Mendoza', phone: '0412-5551234', email: 'cliente1@gmail.com', password: '123', role: 'cliente', balance: 250.00, ratings: '[]', bankInfo: '{}' },
-    { id: 'cliente2@gmail.com', name: 'Ana Gomez', phone: '0424-9998877', email: 'cliente2@gmail.com', password: '123', role: 'cliente', balance: 300.00, ratings: '[]', bankInfo: '{}' },
-    { id: 'conductor1@turides.com', name: 'Pedro Infante', phone: '0414-1112233', email: 'conductor1@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Toyota', model: 'Corolla 2018', passengers: 4, suitcases: 3 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 35.00 }), balance: 45.00, ratings: JSON.stringify([5, 4, 5, 5, 4]), bankInfo: JSON.stringify({ bank: '0102', account: '0102-1234-5678-9012', phone: '0414-1112233', name: 'Pedro Infante' }) },
-    { id: 'conductor3@turides.com', name: 'Maria Gabriela', phone: '0424-7773322', email: 'conductor3@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Ford', model: 'Explorer SUV 2020', passengers: 6, suitcases: 5 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 55.00 }), balance: 150.00, ratings: JSON.stringify([5, 5, 4, 5, 5, 5]), bankInfo: JSON.stringify({ bank: '0105', account: '0105-9876-5432-1098', phone: '0424-7773322', name: 'Maria Gabriela' }) },
-    { id: 'conductor2@turides.com', name: 'Juan Herrera', phone: '0416-4445566', email: 'conductor2@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Chevrolet', model: 'Aveo 2015', passengers: 4, suitcases: 2 }), tariffMode: 'kilometros', fixedTariffs: '{}', balance: 80.00, ratings: JSON.stringify([4, 3, 4, 5, 3]), bankInfo: JSON.stringify({ bank: '0108', account: '0108-5555-6666-7777', phone: '0416-4445566', name: 'Juan Herrera' }) },
-    { id: 'conductor4@turides.com', name: 'Carlos Prueba', phone: '0412-9998877', email: 'conductor4@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'carro', brand: 'Hyundai', model: 'Accent 2022', passengers: 4, suitcases: 3 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 25.00 }), balance: 0.00, ratings: '[]', bankInfo: JSON.stringify({ bank: '0134', account: '0134-1111-2222-3333', phone: '0412-9998877', name: 'Carlos Prueba' }) },
-    { id: 'conductor5@turides.com', name: 'Luis Motero', phone: '0412-5551122', email: 'conductor5@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'moto', brand: 'Yamaha', model: 'MT-07 2023', passengers: 1, suitcases: 0 }), tariffMode: 'kilometros', fixedTariffs: '{}', balance: 30.00, ratings: JSON.stringify([5, 5, 4]), bankInfo: JSON.stringify({ bank: '0172', account: '0172-4444-5555-6666', phone: '0412-5551122', name: 'Luis Motero' }) },
-    { id: 'conductor6@turides.com', name: 'Maria Moto', phone: '0424-3334455', email: 'conductor6@turides.com', password: '123', role: 'conductor', available: 1, vehicle: JSON.stringify({ type: 'moto', brand: 'Honda', model: 'CB190R 2022', passengers: 1, suitcases: 0 }), tariffMode: 'fijo', fixedTariffs: JSON.stringify({ defaultPrice: 15.00 }), balance: 20.00, ratings: JSON.stringify([4, 5, 4, 5]), bankInfo: JSON.stringify({ bank: '0174', account: '0174-7777-8888-9999', phone: '0424-3334455', name: 'Maria Moto' }) }
-];
-
 const SEED_CONFIG = {
     bankName: 'Banco de Venezuela',
     accountNumber: '0102-0000-0000-0000-0000',
@@ -150,21 +138,15 @@ function seedDB() {
     for (const sql of migrations) {
         try { db.exec(sql); } catch(e) { /* column already exists */ }
     }
-    const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
-    if (count === 0) {
-        const insertUser = db.prepare('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffMode, fixedTariffs, balance, ratings, bankInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        const insertMany = db.transaction((users) => {
-            for (const u of users) {
-                insertUser.run(u.id, u.name, u.phone || null, u.email, u.password, u.role, u.available || 0, u.vehicle || null, u.tariffMode || null, u.fixedTariffs || null, u.balance || 0, u.ratings || '[]', u.bankInfo || '{}');
-            }
-        });
-        insertMany(SEED_USERS);
+    const configCount = db.prepare('SELECT COUNT(*) as c FROM config').get().c;
+    if (configCount === 0) {
         const insertConfig = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
         for (const [k, v] of Object.entries(SEED_CONFIG)) {
             insertConfig.run(k, v);
         }
-        console.log('Database seeded.');
     }
+    const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+    console.log(`Database ready. Users: ${userCount}, Config: ${configCount > 0 ? 'loaded' : 'initialized'}`);
 }
 seedDB();
 
@@ -252,7 +234,23 @@ app.post('/api/login/2fa-verify', (req, res) => {
 app.get('/api/setup/status', (req, res) => {
     const adminCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get().c;
     const adminWithPassword = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin' AND passwordChanged = 1").get().c;
-    res.json({ hasAdmin: adminCount > 0, adminSetupComplete: adminWithPassword > 0 });
+    const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+    res.json({ hasAdmin: adminCount > 0, adminSetupComplete: adminWithPassword > 0, totalUsers: userCount });
+});
+
+app.post('/api/setup/reset', (req, res) => {
+    db.exec('DELETE FROM trips');
+    db.exec('DELETE FROM transactions');
+    db.exec('DELETE FROM recharges');
+    db.exec('DELETE FROM withdrawals');
+    db.exec('DELETE FROM users');
+    db.exec('DELETE FROM config');
+    const insertConfig = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
+    for (const [k, v] of Object.entries(SEED_CONFIG)) {
+        insertConfig.run(k, v);
+    }
+    console.log('ALL DATA RESET. Starting fresh.');
+    res.json({ success: true, message: 'Todos los datos han sido eliminados. La app se reiniciará.' });
 });
 
 app.post('/api/setup/admin', (req, res) => {

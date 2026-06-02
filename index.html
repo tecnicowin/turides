@@ -151,14 +151,10 @@
                         <p class="auth-switch mt-4 text-center text-sm">
                             ¿Aún no tienes cuenta? <a href="#" onclick="document.getElementById('login-card').style.display='none'; document.getElementById('register-card').style.display='block';" class="text-purple font-bold">Regístrate aquí</a>
                         </p>
-                        <div class="demo-credentials mt-4 p-3 bg-gray rounded text-xs">
-                            <p class="font-bold text-purple mb-1">Cuentas demo (Contraseña: 123):</p>
-                            <ul class="font-mono">
-                                <li>Conductor Tarifa Fija: conductor1@turides.com</li>
-                                <li>Conductor Kilómetros: conductor2@turides.com</li>
-                                <li>Conductor Moto: conductor5@turides.com</li>
-                                <li>Cliente: cliente1@gmail.com</li>
-                            </ul>
+                        <div id="admin-reset-section" class="mt-4 p-3 bg-gray rounded text-xs" style="display:none;">
+                            <p class="font-bold text-cyan mb-1">¿Necesitas empezar desde cero?</p>
+                            <p class="text-gray mb-2">Esto eliminará TODOS los datos (usuarios, viajes, transacciones).</p>
+                            <button onclick="App.adminReset()" class="btn btn-red btn-sm w-full">Resetear Todo el Sistema</button>
                         </div>
                     </div>
 

@@ -51,6 +51,10 @@ const App = {
         this.setupEventListeners();
         this.setupSocketListeners();
         this.route();
+        const resetSection = document.getElementById('admin-reset-section');
+        if (resetSection && this._setupStatus && this._setupStatus.totalUsers > 0) {
+            resetSection.style.display = 'block';
+        }
     },
 
     async loadFareInfo() {
@@ -1282,6 +1286,21 @@ const App = {
         await API.put('/api/config', data);
         this.showToast('Datos bancarios actualizados.', 'success');
         this.renderAdminDashboard();
+    },
+
+    async adminReset() {
+        if (!confirm('¿ELIMINAR TODOS LOS DATOS?\n\nEsto eliminará todos los usuarios, viajes, transacciones y configuración.\n\n¿Estás seguro?')) return;
+        if (!confirm('ÚLTIMA ADVERTENCIA: Esta acción es irreversible.\n\n¿Realmente deseas eliminar todo?')) return;
+        try {
+            const result = await API.post('/api/setup/reset');
+            if (result.success) {
+                localStorage.removeItem('turides_session');
+                this.session = null;
+                this._setupStatus = await API.get('/api/setup/status');
+                this.showToast('Todos los datos eliminados. App reiniciada.', 'success');
+                this.route();
+            }
+        } catch(err) { this.showToast('Error al resetear.', 'error'); }
     },
 
     logout() {
