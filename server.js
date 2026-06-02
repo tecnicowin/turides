@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const { dbRun, dbGet, dbAll, dbExec } = require('./db');
+const { dbRun, dbGet, dbAll, dbExec, dbClientExec } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -58,49 +58,58 @@ function mapRow(row, m) {
 }
 
 async function initDB() {
-    await dbExec(`DROP TABLE IF EXISTS users, trips, transactions, config, recharges, withdrawals CASCADE`);
-    await dbExec(`CREATE TABLE users (
-        id TEXT PRIMARY KEY, name TEXT, phone TEXT, email TEXT UNIQUE, password TEXT,
-        role TEXT, available INTEGER DEFAULT 0, vehicle TEXT, tariffmode TEXT,
-        fixedtariffs TEXT, balance REAL DEFAULT 0, bankinfo TEXT, ratings TEXT DEFAULT '[]',
-        twofactorsecret TEXT, twofactorenabled INTEGER DEFAULT 0, passwordchanged INTEGER DEFAULT 0
-    )`);
-    await dbExec(`CREATE TABLE trips (
-        id TEXT PRIMARY KEY, clientid TEXT, clientname TEXT, clientphone TEXT,
-        originaddress TEXT, destinationaddress TEXT, distance REAL,
-        conductorid TEXT, conductorname TEXT, conductorphone TEXT, conductorvehicle TEXT,
-        price REAL, pricebs REAL, paymentmethod TEXT, status TEXT DEFAULT 'pendiente',
-        paymentstatus TEXT, clientrating INTEGER, conductorrating INTEGER,
-        clientratingat TEXT, conductorratingat TEXT, createdat TEXT, completedat TEXT,
-        paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal'
-    )`);
-    await dbExec(`CREATE TABLE transactions (
-        id TEXT PRIMARY KEY, tripid TEXT, clientid TEXT, conductorid TEXT,
-        amount REAL, amountbs REAL, method TEXT, status TEXT,
-        reference TEXT, phone TEXT, bankcode TEXT, createdat TEXT
-    )`);
-    await dbExec(`CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)`);
-    await dbExec(`CREATE TABLE recharges (
-        id TEXT PRIMARY KEY, userid TEXT, username TEXT, amount REAL, amountbs REAL,
-        phone TEXT, bankcode TEXT, reference TEXT, status TEXT DEFAULT 'pendiente',
-        adminnote TEXT, createdat TEXT, reviewedat TEXT
-    )`);
-    await dbExec(`CREATE TABLE withdrawals (
-        id TEXT PRIMARY KEY, conductorid TEXT, conductorname TEXT,
-        amount REAL, amountbs REAL, commission REAL DEFAULT 0, netamount REAL DEFAULT 0,
-        bankinfo TEXT, status TEXT DEFAULT 'pendiente', adminnote TEXT,
-        reference TEXT, createdat TEXT, reviewedat TEXT
-    )`);
-
-    const existingConfig = await dbAll('SELECT key FROM config LIMIT 1');
-    if (existingConfig.length === 0) {
-        for (const [k, v] of Object.entries(SEED_CONFIG)) {
-            await dbRun('INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [k, v]);
+    const { getPool } = require('./db');
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+        for (const t of ['withdrawals', 'recharges', 'transactions', 'trips', 'users', 'config']) {
+            await client.query(`DROP TABLE IF EXISTS ${t} CASCADE`);
         }
-    }
+        await client.query(`CREATE TABLE users (
+            id TEXT PRIMARY KEY, name TEXT, phone TEXT, email TEXT UNIQUE, password TEXT,
+            role TEXT, available INTEGER DEFAULT 0, vehicle TEXT, tariffmode TEXT,
+            fixedtariffs TEXT, balance REAL DEFAULT 0, bankinfo TEXT, ratings TEXT DEFAULT '[]',
+            twofactorsecret TEXT, twofactorenabled INTEGER DEFAULT 0, passwordchanged INTEGER DEFAULT 0
+        )`);
+        await client.query(`CREATE TABLE trips (
+            id TEXT PRIMARY KEY, clientid TEXT, clientname TEXT, clientphone TEXT,
+            originaddress TEXT, destinationaddress TEXT, distance REAL,
+            conductorid TEXT, conductorname TEXT, conductorphone TEXT, conductorvehicle TEXT,
+            price REAL, pricebs REAL, paymentmethod TEXT, status TEXT DEFAULT 'pendiente',
+            paymentstatus TEXT, clientrating INTEGER, conductorrating INTEGER,
+            clientratingat TEXT, conductorratingat TEXT, createdat TEXT, completedat TEXT,
+            paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal'
+        )`);
+        await client.query(`CREATE TABLE transactions (
+            id TEXT PRIMARY KEY, tripid TEXT, clientid TEXT, conductorid TEXT,
+            amount REAL, amountbs REAL, method TEXT, status TEXT,
+            reference TEXT, phone TEXT, bankcode TEXT, createdat TEXT
+        )`);
+        await client.query(`CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)`);
+        await client.query(`CREATE TABLE recharges (
+            id TEXT PRIMARY KEY, userid TEXT, username TEXT, amount REAL, amountbs REAL,
+            phone TEXT, bankcode TEXT, reference TEXT, status TEXT DEFAULT 'pendiente',
+            adminnote TEXT, createdat TEXT, reviewedat TEXT
+        )`);
+        await client.query(`CREATE TABLE withdrawals (
+            id TEXT PRIMARY KEY, conductorid TEXT, conductorname TEXT,
+            amount REAL, amountbs REAL, commission REAL DEFAULT 0, netamount REAL DEFAULT 0,
+            bankinfo TEXT, status TEXT DEFAULT 'pendiente', adminnote TEXT,
+            reference TEXT, createdat TEXT, reviewedat TEXT
+        )`);
 
-    const userCount = await dbGet('SELECT COUNT(*)::int as c FROM users');
-    console.log(`Database ready. Users: ${userCount.c}`);
+        const existingConfig = await client.query('SELECT key FROM config LIMIT 1');
+        if (existingConfig.rows.length === 0) {
+            for (const [k, v] of Object.entries(SEED_CONFIG)) {
+                await client.query('INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [k, v]);
+            }
+        }
+
+        const userCount = await client.query('SELECT COUNT(*)::int as c FROM users');
+        console.log(`Database ready. Users: ${userCount.rows[0].c}`);
+    } finally {
+        client.release();
+    }
 }
 
 function parseUser(row) {
