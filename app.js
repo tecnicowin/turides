@@ -31,6 +31,41 @@ const App = {
     _twoFactorQR: null,
     _twoFactorSecret: null,
 
+    async geocodeAddress(address) {
+        try {
+            const encoded = encodeURIComponent(address + ', Venezuela');
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`, {
+                headers: { 'Accept-Language': 'es' }
+            });
+            const data = await r.json();
+            if (data && data.length > 0) {
+                return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+            }
+        } catch(e) {}
+        return null;
+    },
+
+    haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    },
+
+    async calculateDistance(origin, dest) {
+        const [originCoords, destCoords] = await Promise.all([
+            this.geocodeAddress(origin),
+            this.geocodeAddress(dest)
+        ]);
+        if (originCoords && destCoords) {
+            const straightLine = this.haversineDistance(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
+            const roadFactor = 1.35;
+            return parseFloat((straightLine * roadFactor).toFixed(1));
+        }
+        return null;
+    },
+
     async init() {
         if (window.location.search.includes('reset=true') || window.location.search.includes('fresh=true')) {
             localStorage.clear();
@@ -495,8 +530,15 @@ const App = {
         const distBadge = document.getElementById('gps-calculated-distance-badge');
         const listDiv = document.getElementById('available-conductors-list');
         if (!origin || !dest) { this.showToast('Introduce direccion de salida y llegada.', 'error'); return; }
-        const textLength = origin.length + dest.length;
-        const simulatedKm = parseFloat(((textLength % 28) + 10.5).toFixed(1));
+        if (distBadge) { distBadge.innerHTML = `Calculando distancia...`; distBadge.style.display = 'block'; }
+        listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-cyan font-bold">Buscando ruta...</p></div>`;
+        let simulatedKm = await this.calculateDistance(origin, dest);
+        if (!simulatedKm || simulatedKm <= 0) {
+            simulatedKm = 5.0;
+            if (distBadge) distBadge.innerHTML = `Distancia estimada: <strong class="text-yellow">${simulatedKm.toFixed(1)} km</strong> <span class="text-xs text-gray">(no se pudo geolocalizar, estimado)</span>`;
+        } else {
+            if (distBadge) distBadge.innerHTML = `Distancia calculada: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`;
+        }
         this.calculatedDistance = simulatedKm;
         if (distBadge) { distBadge.innerHTML = `Kilometros calculados: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`; distBadge.style.display = 'block'; }
         this.foundConductors = await API.get(`/api/conductors/available?distance=${simulatedKm}&vehicleType=${vehicleType}`);
