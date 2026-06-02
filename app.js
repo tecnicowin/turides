@@ -67,11 +67,16 @@ const App = {
     },
 
     async init() {
-        if (window.location.search.includes('reset=true') || window.location.search.includes('fresh=true')) {
+        if (window.location.search.includes('reset=true')) {
+            if (!confirm('ADVERTENCIA: Esto borrara TODOS los datos del sistema.\n\nUsuarios, viajes, transacciones y configuracion seran eliminados.\n\n¿Realmente deseas continuar?')) {
+                window.history.replaceState({}, '', window.location.pathname);
+                window.location.href = '/';
+                return;
+            }
+            try { await API.post('/api/setup/reset', { confirm: 'DELETE_ALL_DATA' }); } catch(e) {}
             localStorage.clear();
             sessionStorage.clear();
             window.history.replaceState({}, '', window.location.pathname);
-            try { await API.post('/api/setup/reset'); } catch(e) {}
             this._setupStatus = { hasAdmin: false, adminSetupComplete: false, totalUsers: 0 };
             await this.loadFareInfo();
             this.setupEventListeners();
@@ -99,10 +104,6 @@ const App = {
         this.setupEventListeners();
         this.setupSocketListeners();
         this.route();
-        const resetBtn = document.getElementById('login-reset-btn');
-        if (resetBtn && this._setupStatus && this._setupStatus.adminSetupComplete) {
-            resetBtn.style.display = 'none';
-        }
     },
 
     async loadFareInfo() {
@@ -242,7 +243,7 @@ const App = {
     route() {
         if (!this.session) {
             this.stopConductorPolling();
-            if (this._setupStatus && !this._setupStatus.adminSetupComplete) {
+            if (this._setupStatus && !this._setupStatus.hasAdmin) {
                 this.showView('setup');
             } else {
                 this.showView('login');
@@ -1493,7 +1494,7 @@ const App = {
     async adminReset() {
         if (!confirm('ELIMINAR TODOS LOS DATOS?\n\nEsto borrará todos los usuarios, viajes, transacciones y configuración.\nDespués podrás crear un nuevo administrador.\n\n¿Continuar?')) return;
         try {
-            const result = await API.post('/api/setup/reset');
+            const result = await API.post('/api/setup/reset', { confirm: 'DELETE_ALL_DATA' });
             if (result.success) {
                 localStorage.removeItem('turides_session');
                 this.session = null;

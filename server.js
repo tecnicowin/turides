@@ -233,12 +233,15 @@ app.post('/api/login/2fa-verify', (req, res) => {
 // === FIRST-TIME ADMIN SETUP ===
 app.get('/api/setup/status', (req, res) => {
     const adminCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get().c;
-    const adminWithPassword = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin' AND passwordChanged = 1").get().c;
     const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
-    res.json({ hasAdmin: adminCount > 0, adminSetupComplete: adminWithPassword > 0, totalUsers: userCount });
+    res.json({ hasAdmin: adminCount > 0, totalUsers: userCount });
 });
 
 app.post('/api/setup/reset', (req, res) => {
+    const { confirm } = req.body;
+    if (confirm !== 'DELETE_ALL_DATA') {
+        return res.status(403).json({ error: 'Confirmacion requerida' });
+    }
     db.exec('DELETE FROM trips');
     db.exec('DELETE FROM transactions');
     db.exec('DELETE FROM recharges');
