@@ -66,11 +66,11 @@ async function initDB() {
     const existingConfig = await dbAll('SELECT key FROM config LIMIT 1');
     if (existingConfig.length === 0) {
         for (const [k, v] of Object.entries(SEED_CONFIG)) {
-            await dbRun('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)', [k, v]);
+            await dbRun('INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [k, v]);
         }
     }
 
-    const userCount = await dbGet('SELECT COUNT(*) as c FROM users');
+    const userCount = await dbGet('SELECT COUNT(*)::int as c FROM users');
     console.log(`Database ready. Users: ${userCount.c}`);
 }
 
@@ -131,7 +131,7 @@ const KILOMETER_RATE = {
 // === AUTH ===
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
-    const row = await dbGet('SELECT * FROM users WHERE email = ? AND password = ?', [email.toLowerCase(), password]);
+    const row = await dbGet('SELECT * FROM users WHERE email = $1 AND password = $2', [email.toLowerCase(), password]);
     if (!row) return res.status(401).json({ error: 'Credenciales incorrectas' });
     if (row.twoFactorEnabled) return res.json({ twoFactorRequired: true, userId: row.id });
     res.json(parseUser(row));
@@ -140,7 +140,7 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/login/2fa-verify', async (req, res) => {
     const { userId, code } = req.body;
     const OTPAuth = require('otpauth');
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(401).json({ error: 'Usuario no encontrado' });
     if (!row.twoFactorEnabled || !row.twoFactorSecret) return res.status(400).json({ error: '2FA no activo' });
     const totp = new OTPAuth.TOTP({ issuer: 'TuRides', label: row.email, algorithm: 'SHA1', digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(row.twoFactorSecret) });
@@ -151,46 +151,46 @@ app.post('/api/login/2fa-verify', async (req, res) => {
 
 app.post('/api/register', async (req, res) => {
     const { name, phone, email, password, role, vehicleData } = req.body;
-    const exists = await dbGet('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
+    const exists = await dbGet('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (exists) return res.status(400).json({ error: 'El correo ya esta registrado' });
     const vehicle = role === 'conductor' && vehicleData ? JSON.stringify({ type: vehicleData.type || 'carro', brand: vehicleData.brand, model: vehicleData.model, passengers: parseInt(vehicleData.passengers) || 4, suitcases: parseInt(vehicleData.suitcases) || 2 }) : null;
     const tariffMode = role === 'conductor' ? (vehicleData?.tariffMode || 'kilometros') : null;
     const fixedTariffs = role === 'conductor' ? JSON.stringify({ defaultPrice: 20.00 }) : null;
-    await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffMode, fixedTariffs, balance, ratings, bankInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)',
+    await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffMode, fixedTariffs, balance, ratings, bankInfo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12)',
         [email, name, phone, email.toLowerCase(), password, role, 0, vehicle, tariffMode, fixedTariffs, '[]', '{}']);
-    const user = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [email]));
+    const user = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [email]));
     io.emit('user:created', user);
     res.json(user);
 });
 
 // === SETUP ===
 app.get('/api/setup/status', async (req, res) => {
-    const adminCount = await dbGet("SELECT COUNT(*) as c FROM users WHERE role = 'admin'");
-    const userCount = await dbGet('SELECT COUNT(*) as c FROM users');
+    const adminCount = await dbGet("SELECT COUNT(*)::int as c FROM users WHERE role = 'admin'");
+    const userCount = await dbGet('SELECT COUNT(*)::int as c FROM users');
     res.json({ hasAdmin: adminCount.c > 0, totalUsers: userCount.c });
 });
 
 app.post('/api/setup/admin', async (req, res) => {
-    const adminCount = await dbGet("SELECT COUNT(*) as c FROM users WHERE role = 'admin'");
+    const adminCount = await dbGet("SELECT COUNT(*)::int as c FROM users WHERE role = 'admin'");
     if (adminCount.c > 0) return res.status(400).json({ error: 'Ya existe un administrador.' });
     const { name, email, phone, password } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Nombre, email y contraseña son requeridos' });
     const id = email.toLowerCase();
-    await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, balance, ratings, bankInfo, passwordChanged) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1)',
+    await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, balance, ratings, bankInfo, passwordChanged) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, 1)',
         [id, name, phone || null, email.toLowerCase(), password, 'admin', 0, '[]', '{}']);
-    const user = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [id]));
+    const user = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [id]));
     io.emit('user:created', user);
     res.json(user);
 });
 
 app.post('/api/change-password', async (req, res) => {
     const { userId, currentPassword, newPassword } = req.body;
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (row.password !== currentPassword) return res.status(401).json({ error: 'Contrasena actual incorrecta' });
     if (!newPassword || newPassword.length < 3) return res.status(400).json({ error: 'Minimo 3 caracteres' });
-    await dbRun('UPDATE users SET password = ?, passwordChanged = 1 WHERE id = ?', [newPassword, userId]);
-    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [userId]));
+    await dbRun('UPDATE users SET password = $1, passwordChanged = 1 WHERE id = $2', [newPassword, userId]);
+    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [userId]));
     io.emit('user:updated', updated);
     res.json({ success: true, message: 'Contrasena actualizada' });
 });
@@ -200,12 +200,12 @@ app.post('/api/2fa/setup', async (req, res) => {
     const OTPAuth = require('otpauth');
     const QRCode = require('qrcode');
     const { userId } = req.body;
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (row.twoFactorEnabled) return res.status(400).json({ error: '2FA ya activo' });
     const secret = new OTPAuth.Secret({ size: 20 });
     const totp = new OTPAuth.TOTP({ issuer: 'TuRides', label: row.email, algorithm: 'SHA1', digits: 6, period: 30, secret });
-    await dbRun('UPDATE users SET twoFactorSecret = ? WHERE id = ?', [secret.base32, userId]);
+    await dbRun('UPDATE users SET twoFactorSecret = $1 WHERE id = $2', [secret.base32, userId]);
     const otpauthUrl = totp.toString();
     QRCode.toDataURL(otpauthUrl, (err, dataUrl) => {
         if (err) return res.status(500).json({ error: 'Error generando QR' });
@@ -216,24 +216,24 @@ app.post('/api/2fa/setup', async (req, res) => {
 app.post('/api/2fa/verify-and-enable', async (req, res) => {
     const OTPAuth = require('otpauth');
     const { userId, code } = req.body;
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (!row.twoFactorSecret) return res.status(400).json({ error: 'Primero genera un secreto 2FA' });
     const totp = new OTPAuth.TOTP({ issuer: 'TuRides', label: row.email, algorithm: 'SHA1', digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(row.twoFactorSecret) });
     if (totp.validate({ token: code, window: 1 }) === null) return res.status(400).json({ error: 'Codigo incorrecto' });
-    await dbRun('UPDATE users SET twoFactorEnabled = 1 WHERE id = ?', [userId]);
-    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [userId]));
+    await dbRun('UPDATE users SET twoFactorEnabled = 1 WHERE id = $1', [userId]);
+    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [userId]));
     io.emit('user:updated', updated);
     res.json({ success: true, message: '2FA activado' });
 });
 
 app.post('/api/2fa/disable', async (req, res) => {
     const { userId, password } = req.body;
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (row.password !== password) return res.status(401).json({ error: 'Contrasena incorrecta' });
-    await dbRun('UPDATE users SET twoFactorEnabled = 0, twoFactorSecret = NULL WHERE id = ?', [userId]);
-    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [userId]));
+    await dbRun('UPDATE users SET twoFactorEnabled = 0, twoFactorSecret = NULL WHERE id = $1', [userId]);
+    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [userId]));
     io.emit('user:updated', updated);
     res.json({ success: true, message: '2FA desactivado' });
 });
@@ -249,13 +249,13 @@ app.get('/api/users', async (req, res) => {
 });
 
 app.get('/api/users/:id', async (req, res) => {
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [req.params.id]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json(parseUser(row));
 });
 
 app.put('/api/users/:id', async (req, res) => {
-    const row = await dbGet('SELECT * FROM users WHERE id = ?', [req.params.id]);
+    const row = await dbGet('SELECT * FROM users WHERE id = $1', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     const updates = req.body;
     if (updates.vehicle && typeof updates.vehicle === 'object') updates.vehicle = JSON.stringify(updates.vehicle);
@@ -265,10 +265,10 @@ app.put('/api/users/:id', async (req, res) => {
     if (updates.available !== undefined) updates.available = updates.available ? 1 : 0;
     const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'password' && k !== 'twoFactorSecret' && k !== 'twoFactorEnabled' && k !== 'passwordChanged');
     if (fields.length === 0) return res.json(parseUser(row));
-    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
     const values = fields.map(f => updates[f]);
-    await dbRun(`UPDATE users SET ${setClause} WHERE id = ?`, [...values, req.params.id]);
-    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [req.params.id]));
+    await dbRun(`UPDATE users SET ${setClause} WHERE id = $${fields.length + 1}`, [...values, req.params.id]);
+    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [req.params.id]));
     io.emit('user:updated', updated);
     res.json(updated);
 });
@@ -303,13 +303,13 @@ app.get('/api/conductors/available', async (req, res) => {
 
 // === TRIPS ===
 app.get('/api/trips', async (req, res) => {
-    const rows = await dbAll('SELECT * FROM trips ORDER BY createdAt DESC');
+    const rows = await dbAll('SELECT * FROM trips ORDER BY "createdAt" DESC');
     res.json(rows.map(parseTrip));
 });
 
 app.post('/api/trips', async (req, res) => {
     const { clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, price, paymentMethod } = req.body;
-    const conductor = await dbGet('SELECT * FROM users WHERE id = ?', [conductorId]);
+    const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [conductorId]);
     if (!conductor) return res.status(404).json({ error: 'Conductor no encontrado' });
     const vehicle = typeof conductor.vehicle === 'string' ? JSON.parse(conductor.vehicle || '{}') : (conductor.vehicle || {});
     const id = 'TRIP_' + Date.now();
@@ -318,33 +318,33 @@ app.post('/api/trips', async (req, res) => {
     const finalPrice = parseFloat((price * fareInfo.multiplier).toFixed(2));
     const rate = await getBCVRate();
     const priceBs = parseFloat((finalPrice * rate).toFixed(2));
-    await dbRun('INSERT INTO trips (id, clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, conductorName, conductorPhone, conductorVehicle, price, priceBs, paymentMethod, status, createdAt, fareMultiplier, farePeriod) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    await dbRun('INSERT INTO trips (id, clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, conductorName, conductorPhone, conductorVehicle, price, priceBs, paymentMethod, status, "createdAt", fareMultiplier, farePeriod) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)',
         [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period]);
-    const trip = parseTrip(await dbGet('SELECT * FROM trips WHERE id = ?', [id]));
+    const trip = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [id]));
     io.emit('trip:created', trip);
     io.to('conductor_' + conductorId).emit('trip:new_request', trip);
     res.json(trip);
 });
 
 app.put('/api/trips/:id/status', async (req, res) => {
-    const trip = await dbGet('SELECT * FROM trips WHERE id = ?', [req.params.id]);
+    const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { status } = req.body;
     const now = new Date().toISOString();
     if (status === 'completado') {
-        await dbRun('UPDATE trips SET status = ?, completedAt = ? WHERE id = ?', [status, now, req.params.id]);
+        await dbRun('UPDATE trips SET status = $1, "completedAt" = $2 WHERE id = $3', [status, now, req.params.id]);
     } else if (status === 'pago_verificado') {
-        await dbRun('UPDATE trips SET status = ?, paymentVerifiedAt = ? WHERE id = ?', [status, now, req.params.id]);
+        await dbRun('UPDATE trips SET status = $1, "paymentVerifiedAt" = $2 WHERE id = $3', [status, now, req.params.id]);
     } else if (status === 'aceptado') {
-        await dbRun('UPDATE trips SET status = ? WHERE id = ?', [status, req.params.id]);
-        await dbRun('UPDATE users SET available = 0 WHERE id = ?', [trip.conductorId]);
+        await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
+        await dbRun('UPDATE users SET available = 0 WHERE id = $1', [trip.conductorId]);
     } else if (status === 'calificado') {
-        await dbRun('UPDATE trips SET status = ? WHERE id = ?', [status, req.params.id]);
-        await dbRun('UPDATE users SET available = 1 WHERE id = ?', [trip.conductorId]);
+        await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
+        await dbRun('UPDATE users SET available = 1 WHERE id = $1', [trip.conductorId]);
     } else {
-        await dbRun('UPDATE trips SET status = ? WHERE id = ?', [status, req.params.id]);
+        await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
     }
-    const updated = parseTrip(await dbGet('SELECT * FROM trips WHERE id = ?', [req.params.id]));
+    const updated = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]));
     io.emit('trip:status_changed', updated);
     io.to('client_' + updated.clientId).emit('trip:status_changed', updated);
     io.to('conductor_' + updated.conductorId).emit('trip:status_changed', updated);
@@ -352,25 +352,25 @@ app.put('/api/trips/:id/status', async (req, res) => {
 });
 
 app.put('/api/trips/:id/rating', async (req, res) => {
-    const trip = await dbGet('SELECT * FROM trips WHERE id = ?', [req.params.id]);
+    const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { field, value } = req.body;
     const now = new Date().toISOString();
-    await dbRun(`UPDATE trips SET ${field} = ?, ${field}At = ? WHERE id = ?`, [value, now, req.params.id]);
+    await dbRun(`UPDATE trips SET ${field} = $1, "${field}At" = $2 WHERE id = $3`, [value, now, req.params.id]);
     const userField = field === 'clientRating' ? 'clientId' : 'conductorId';
     const userId = trip[userField];
-    const user = await dbGet('SELECT ratings FROM users WHERE id = ?', [userId]);
+    const user = await dbGet('SELECT ratings FROM users WHERE id = $1', [userId]);
     if (user) {
         const ratings = typeof user.ratings === 'string' ? JSON.parse(user.ratings || '[]') : (user.ratings || []);
         ratings.push(value);
-        await dbRun('UPDATE users SET ratings = ? WHERE id = ?', [JSON.stringify(ratings), userId]);
+        await dbRun('UPDATE users SET ratings = $1 WHERE id = $2', [JSON.stringify(ratings), userId]);
     }
-    const updatedTrip = await dbGet('SELECT * FROM trips WHERE id = ?', [req.params.id]);
+    const updatedTrip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]);
     if (updatedTrip.clientRating && updatedTrip.conductorRating) {
-        await dbRun('UPDATE trips SET status = ? WHERE id = ?', ['calificado', req.params.id]);
-        await dbRun('UPDATE users SET available = 1 WHERE id = ?', [updatedTrip.conductorId]);
+        await dbRun('UPDATE trips SET status = $1 WHERE id = $2', ['calificado', req.params.id]);
+        await dbRun('UPDATE users SET available = 1 WHERE id = $1', [updatedTrip.conductorId]);
     }
-    const final = parseTrip(await dbGet('SELECT * FROM trips WHERE id = ?', [req.params.id]));
+    const final = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]));
     io.emit('trip:rated', final);
     io.to('client_' + final.clientId).emit('trip:rated', final);
     io.to('conductor_' + final.conductorId).emit('trip:rated', final);
@@ -383,7 +383,7 @@ app.get('/api/rkm-config', async (req, res) => res.json(await getConfig()));
 
 app.put('/api/config', async (req, res) => {
     for (const [k, v] of Object.entries(req.body)) {
-        await dbRun('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', [k, String(v)]);
+        await dbRun('INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', [k, String(v)]);
     }
     io.emit('config:updated', await getConfig());
     res.json(await getConfig());
@@ -398,27 +398,27 @@ app.get('/api/fare-info', async (req, res) => {
 // === PAYMENTS ===
 app.post('/api/payments/rkm', async (req, res) => {
     const { tripId } = req.body;
-    const trip = await dbGet('SELECT * FROM trips WHERE id = ?', [tripId]);
+    const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [tripId]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
-    const client = await dbGet('SELECT * FROM users WHERE id = ?', [trip.clientId]);
+    const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientId]);
     if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
     if (client.balance < trip.price) return res.status(400).json({ error: 'Saldo insuficiente' });
     const newClientBalance = parseFloat((client.balance - trip.price).toFixed(2));
-    await dbRun('UPDATE users SET balance = ? WHERE id = ?', [newClientBalance, trip.clientId]);
-    const conductor = await dbGet('SELECT * FROM users WHERE id = ?', [trip.conductorId]);
+    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBalance, trip.clientId]);
+    const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorId]);
     if (conductor) {
         const newCondBalance = parseFloat((conductor.balance + trip.price).toFixed(2));
-        await dbRun('UPDATE users SET balance = ? WHERE id = ?', [newCondBalance, trip.conductorId]);
+        await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBalance, trip.conductorId]);
     }
     const now = new Date().toISOString();
     const rate = await getBCVRate();
     const amountBs = parseFloat((trip.price * rate).toFixed(2));
-    await dbRun('INSERT INTO transactions (id, tripId, clientId, conductorId, amount, amountBs, method, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    await dbRun('INSERT INTO transactions (id, tripId, clientId, conductorId, amount, amountBs, method, status, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
         ['TXN_' + Date.now(), tripId, trip.clientId, trip.conductorId, trip.price, amountBs, 'rkm', 'completado', now]);
-    await dbRun('UPDATE trips SET paymentStatus = ?, status = ?, completedAt = ? WHERE id = ?', ['pagado', 'completado', now, tripId]);
+    await dbRun('UPDATE trips SET paymentStatus = $1, status = $2, "completedAt" = $3 WHERE id = $4', ['pagado', 'completado', now, tripId]);
     io.emit('payment:completed', { tripId, method: 'rkm' });
-    const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [trip.clientId]));
-    const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [trip.conductorId]));
+    const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientId]));
+    const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorId]));
     io.to('client_' + trip.clientId).emit('user:updated', updatedClient);
     io.to('conductor_' + trip.conductorId).emit('user:updated', updatedConductor);
     res.json({ success: true });
@@ -426,14 +426,14 @@ app.post('/api/payments/rkm', async (req, res) => {
 
 app.post('/api/payments/pago_movil', async (req, res) => {
     const { tripId, phone, bankCode, reference } = req.body;
-    const trip = await dbGet('SELECT * FROM trips WHERE id = ?', [tripId]);
+    const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [tripId]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const now = new Date().toISOString();
     const rate = await getBCVRate();
     const amountBs = parseFloat((trip.price * rate).toFixed(2));
-    await dbRun('INSERT INTO transactions (id, tripId, clientId, conductorId, amount, amountBs, method, status, reference, phone, bankCode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    await dbRun('INSERT INTO transactions (id, tripId, clientId, conductorId, amount, amountBs, method, status, reference, phone, bankCode, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
         ['TXN_' + Date.now(), tripId, trip.clientId, trip.conductorId, trip.price, amountBs, 'pago_movil', 'completado', reference, phone, bankCode, now]);
-    await dbRun('UPDATE trips SET paymentStatus = ?, status = ?, completedAt = ? WHERE id = ?', ['pagado', 'completado', now, tripId]);
+    await dbRun('UPDATE trips SET paymentStatus = $1, status = $2, "completedAt" = $3 WHERE id = $4', ['pagado', 'completado', now, tripId]);
     io.emit('payment:completed', { tripId, method: 'pago_movil' });
     res.json({ success: true });
 });
@@ -441,35 +441,35 @@ app.post('/api/payments/pago_movil', async (req, res) => {
 // === WALLET RECHARGE ===
 app.post('/api/wallet/recharge', async (req, res) => {
     const { userId, amount, phone, bankCode, reference } = req.body;
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    const user = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (!amount || amount <= 0) return res.status(400).json({ error: 'Monto invalido' });
     const id = 'RCH_' + Date.now();
     const now = new Date().toISOString();
     const rate = await getBCVRate();
     const amountBs = parseFloat((amount * rate).toFixed(2));
-    await dbRun('INSERT INTO recharges (id, userId, userName, amount, amountBs, phone, bankCode, reference, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    await dbRun('INSERT INTO recharges (id, userId, userName, amount, amountBs, phone, bankCode, reference, status, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [id, userId, user.name, amount, amountBs, phone, bankCode, reference, 'pendiente', now]);
     io.emit('recharge:created', { id, userId, userName: user.name, amount, amountBs, status: 'pendiente' });
     res.json({ success: true, id, message: 'Solicitud de recarga enviada.' });
 });
 
 app.get('/api/wallet/recharges', async (req, res) => {
-    res.json(await dbAll('SELECT * FROM recharges ORDER BY createdAt DESC'));
+    res.json(await dbAll('SELECT * FROM recharges ORDER BY "createdAt" DESC'));
 });
 
 app.put('/api/wallet/recharges/:id', async (req, res) => {
     const { status, adminNote } = req.body;
-    const recharge = await dbGet('SELECT * FROM recharges WHERE id = ?', [req.params.id]);
+    const recharge = await dbGet('SELECT * FROM recharges WHERE id = $1', [req.params.id]);
     if (!recharge) return res.status(404).json({ error: 'Recarga no encontrada' });
     const now = new Date().toISOString();
-    await dbRun('UPDATE recharges SET status = ?, adminNote = ?, reviewedAt = ? WHERE id = ?', [status, adminNote || '', now, req.params.id]);
+    await dbRun('UPDATE recharges SET status = $1, adminNote = $2, "reviewedAt" = $3 WHERE id = $4', [status, adminNote || '', now, req.params.id]);
     if (status === 'aprobada') {
-        const user = await dbGet('SELECT * FROM users WHERE id = ?', [recharge.userId]);
+        const user = await dbGet('SELECT * FROM users WHERE id = $1', [recharge.userId]);
         if (user) {
             const newBalance = parseFloat((user.balance + recharge.amount).toFixed(2));
-            await dbRun('UPDATE users SET balance = ? WHERE id = ?', [newBalance, recharge.userId]);
-            const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [recharge.userId]));
+            await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, recharge.userId]);
+            const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [recharge.userId]));
             io.to('client_' + recharge.userId).emit('user:updated', updated);
             io.to('client_' + recharge.userId).emit('recharge:approved', { amount: recharge.amount });
         }
@@ -481,7 +481,7 @@ app.put('/api/wallet/recharges/:id', async (req, res) => {
 // === WALLET WITHDRAWAL ===
 app.post('/api/wallet/withdraw', async (req, res) => {
     const { conductorId, amount } = req.body;
-    const conductor = await dbGet('SELECT * FROM users WHERE id = ?', [conductorId]);
+    const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [conductorId]);
     if (!conductor) return res.status(404).json({ error: 'Conductor no encontrado' });
     if (!amount || amount <= 0) return res.status(400).json({ error: 'Monto invalido' });
     if (conductor.balance < amount) return res.status(400).json({ error: 'Saldo insuficiente' });
@@ -495,32 +495,37 @@ app.post('/api/wallet/withdraw', async (req, res) => {
     const now = new Date().toISOString();
     const rate = await getBCVRate();
     const amountBs = parseFloat((amount * rate).toFixed(2));
-    await dbRun('INSERT INTO withdrawals (id, conductorId, conductorName, amount, amountBs, commission, netAmount, bankInfo, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    await dbRun('INSERT INTO withdrawals (id, conductorId, conductorName, amount, amountBs, commission, netAmount, bankInfo, status, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [id, conductorId, conductor.name, amount, amountBs, commission, netAmount, JSON.stringify(bankInfo), 'pendiente', now]);
-    await dbRun('UPDATE users SET balance = ? WHERE id = ?', [parseFloat((conductor.balance - amount).toFixed(2)), conductorId]);
-    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [conductorId]));
+    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [parseFloat((conductor.balance - amount).toFixed(2)), conductorId]);
+    const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [conductorId]));
     io.to('conductor_' + conductorId).emit('user:updated', updated);
     io.emit('withdrawal:created', { id, conductorId, conductorName: conductor.name, amount, amountBs, commission, netAmount, status: 'pendiente' });
     res.json({ success: true, id, message: 'Solicitud de retiro enviada.' });
 });
 
 app.get('/api/wallet/withdrawals', async (req, res) => {
-    res.json(await dbAll('SELECT * FROM withdrawals ORDER BY createdAt DESC'));
+    res.json(await dbAll('SELECT * FROM withdrawals ORDER BY "createdAt" DESC'));
 });
 
 app.put('/api/wallet/withdrawals/:id', async (req, res) => {
     const { status, adminNote, reference } = req.body;
-    const withdrawal = await dbGet('SELECT * FROM withdrawals WHERE id = ?', [req.params.id]);
+    const withdrawal = await dbGet('SELECT * FROM withdrawals WHERE id = $1', [req.params.id]);
     if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
     const now = new Date().toISOString();
-    await dbRun('UPDATE withdrawals SET status = ?, adminNote = ?, reviewedAt = ?, reference = COALESCE(?, reference) WHERE id = ?',
-        [status, adminNote || '', now, reference || null, req.params.id]);
+    if (reference) {
+        await dbRun('UPDATE withdrawals SET status = $1, adminNote = $2, "reviewedAt" = $3, reference = $4 WHERE id = $5',
+            [status, adminNote || '', now, reference, req.params.id]);
+    } else {
+        await dbRun('UPDATE withdrawals SET status = $1, adminNote = $2, "reviewedAt" = $3 WHERE id = $4',
+            [status, adminNote || '', now, req.params.id]);
+    }
     if (status === 'rechazada') {
-        const conductor = await dbGet('SELECT * FROM users WHERE id = ?', [withdrawal.conductorId]);
+        const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [withdrawal.conductorId]);
         if (conductor) {
             const newBalance = parseFloat((conductor.balance + withdrawal.amount).toFixed(2));
-            await dbRun('UPDATE users SET balance = ? WHERE id = ?', [newBalance, withdrawal.conductorId]);
-            const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = ?', [withdrawal.conductorId]));
+            await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, withdrawal.conductorId]);
+            const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [withdrawal.conductorId]));
             io.to('conductor_' + withdrawal.conductorId).emit('user:updated', updated);
             io.to('conductor_' + withdrawal.conductorId).emit('withdrawal:rejected', { amount: withdrawal.amount, reason: adminNote });
         }
@@ -535,7 +540,7 @@ app.put('/api/wallet/withdrawals/:id', async (req, res) => {
 
 // === TRANSACTIONS ===
 app.get('/api/transactions', async (req, res) => {
-    res.json(await dbAll('SELECT * FROM transactions ORDER BY createdAt DESC'));
+    res.json(await dbAll('SELECT * FROM transactions ORDER BY "createdAt" DESC'));
 });
 
 // === SOCKET.IO ===
