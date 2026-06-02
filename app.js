@@ -127,6 +127,12 @@ const App = {
     },
 
     setupSocketListeners() {
+        socket.on('connect', () => {
+            if (this.session) {
+                socket.emit('join', this.session.role + '_' + this.session.id);
+            }
+        });
+
         socket.on('trip:new_request', (trip) => {
             if (this.session && this.session.role === 'conductor' && trip.conductorId === this.session.id) {
                 this.showToast('Nueva solicitud de viaje recibida!', 'info');
@@ -166,12 +172,25 @@ const App = {
             this.renderNavbar();
         });
 
+        socket.on('withdrawal:realized', (data) => {
+            if (!this.session) return;
+            this.showToast(`✅ Retiro realizado! Recibiste $${data.netAmount.toFixed(2)} en tu cuenta. Ref: ${data.reference}`, 'success');
+            this.updateViewContent();
+        });
+
+        socket.on('withdrawal:rejected', (data) => {
+            if (!this.session) return;
+            this.showToast(`❌ Retiro rechazado: $${data.amount.toFixed(2)}. ${data.reason || ''}`, 'error');
+            this.updateViewContent();
+        });
+
         socket.on('user:updated', (user) => {
             if (!this.session) return;
             if (user.id === this.session.id) {
                 this.session = user;
                 localStorage.setItem('turides_session', JSON.stringify(user));
                 this.renderNavbar();
+                this.updateViewContent();
             }
         });
 
@@ -590,9 +609,9 @@ const App = {
             }
             const result = await API.post('/api/payments/rkm', { tripId });
             if (result.error) { this.showToast(result.error, 'error'); return; }
-            this.showToast('Pago procesado automaticamente. Saldo actualizado.', 'success');
             this.session = await API.get(`/api/users/${this.session.id}`);
             localStorage.setItem('turides_session', JSON.stringify(this.session));
+            this.showToast('Pago procesado. Saldo actualizado.', 'success');
             this.renderNavbar();
             this.updateViewContent();
             return;
@@ -896,10 +915,15 @@ const App = {
         }
 
         if (approvedW.length > 0) {
-            html += `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-emerald">✅ Retiros Aprobados (${approvedW.length})</h3>`;
+            html += `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-emerald">✅ Retiros Aprobados/Realizados (${approvedW.length})</h3>`;
             approvedW.slice(0, 5).forEach(w => {
                 const date = w.reviewedAt ? new Date(w.reviewedAt).toLocaleDateString() : '-';
-                html += `<div class="p-2 bg-gray rounded mb-1 flex justify-between text-xs"><span>$${w.amount.toFixed(2)} - ${date}</span><span class="badge text-emerald">Aprobado</span></div>`;
+                const net = w.netAmount || (w.amount - (w.commission || 0));
+                if (w.status === 'realizado') {
+                    html += `<div class="p-3 bg-gray rounded mb-2"><div class="flex justify-between items-center"><span class="font-bold text-emerald">$${net.toFixed(2)} transferidos</span><span class="badge text-emerald">REALIZADO</span></div><p class="text-xs text-gray mt-1">Ref: <strong class="text-cyan">${w.reference || 'Sin referencia'}</strong> | ${date}</p></div>`;
+                } else {
+                    html += `<div class="p-2 bg-gray rounded mb-1 flex justify-between text-xs"><span>$${w.amount.toFixed(2)} - ${date}</span><span class="badge text-emerald">Aprobado</span></div>`;
+                }
             });
             html += `</div>`;
         }
@@ -1083,10 +1107,12 @@ const App = {
             html += `<p class="text-center text-gray p-4">No hay solicitudes de retiro.</p>`;
         } else {
             withdrawals.forEach(w => {
-                const statusColor = w.status === 'aprobada' ? 'text-emerald' : w.status === 'rechazada' ? 'text-red' : 'text-cyan';
+                const statusColor = w.status === 'aprobada' ? 'text-emerald' : w.status === 'rechazada' ? 'text-red' : w.status === 'realizado' ? 'text-purple' : 'text-cyan';
                 const bInfo = JSON.parse(w.bankInfo || '{}');
                 const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
                 const bankName = bankNames[bInfo.bank] || bInfo.bank || '-';
+                const commission = w.commission || 0;
+                const netAmount = w.netAmount || (w.amount - commission);
 
                 html += `<div class="glass-card mb-3 p-4 border-l-purple">
                     <div class="flex justify-between items-start mb-2">
@@ -1096,19 +1122,26 @@ const App = {
                         </div>
                         <span class="badge ${statusColor}">${w.status.toUpperCase()}</span>
                     </div>
-                    <div class="grid grid-2 gap-2 mb-2 text-xs">
-                        <div class="p-2 bg-gray rounded"><span class="text-gray">Monto:</span><br><strong class="text-emerald text-lg">$${w.amount.toFixed(2)}</strong> <span class="text-gray">Bs ${w.amountBs}</span></div>
-                        <div class="p-2 bg-gray rounded"><span class="text-gray">Cuenta destino:</span><br><strong>${bankName}</strong><br><span class="font-mono">${bInfo.account || '-'}</span></div>
+                    <div class="p-3 bg-gray rounded mb-3">
+                        <p class="text-xs text-gray font-bold mb-2">RESUMEN DEL RETIRO:</p>
+                        <div class="flex justify-between text-sm mb-1"><span>Monto solicitado:</span><span class="font-bold">$${w.amount.toFixed(2)} <span class="text-xs text-gray">Bs ${w.amountBs}</span></span></div>
+                        <div class="flex justify-between text-sm mb-1 text-red"><span>Comision (${this._bcvRate ? '10' : '10'}%):</span><span class="font-bold">-$${commission.toFixed(2)}</span></div>
+                        <hr class="border-gray my-1">
+                        <div class="flex justify-between text-sm font-bold"><span>Monto a transferir:</span><span class="text-emerald text-lg">$${netAmount.toFixed(2)}</span></div>
                     </div>
                     <div class="grid grid-2 gap-2 mb-2 text-xs">
-                        <div class="p-2 bg-gray rounded"><span class="text-gray">Titular:</span><br><strong>${bInfo.name || '-'}</strong></div>
-                        <div class="p-2 bg-gray rounded"><span class="text-gray">Tel:</span><br><strong>${bInfo.phone || '-'}</strong></div>
+                        <div class="p-2 bg-gray rounded"><span class="text-gray">Cuenta destino:</span><br><strong>${bankName}</strong><br><span class="font-mono">${bInfo.account || '-'}</span></div>
+                        <div class="p-2 bg-gray rounded"><span class="text-gray">Titular:</span><br><strong>${bInfo.name || '-'}</strong><br><span class="text-gray">Tel: ${bInfo.phone || '-'}</span></div>
                     </div>
                     <div class="p-2 bg-gray rounded mb-2 text-xs">
-                        <span class="text-gray">Fecha solicitud:</span> <strong>${w.createdAt ? new Date(w.createdAt).toLocaleString() : '-'}</strong>
+                        <span class="text-gray">Fecha:</span> <strong>${w.createdAt ? new Date(w.createdAt).toLocaleString() : '-'}</strong>
                         ${w.reviewedAt ? `<span class="ml-3 text-gray">Revisado:</span> <strong>${new Date(w.reviewedAt).toLocaleString()}</strong>` : ''}
+                        ${w.reference ? `<span class="ml-3 text-cyan">Ref:</span> <strong>${w.reference}</strong>` : ''}
                     </div>
-                    ${w.status === 'pendiente' ? `<div class="flex gap-2 mt-3"><button onclick="App.adminReviewWithdrawal('${w.id}', 'aprobada')" class="btn btn-emerald flex-1">✓ Aprobar Retiro</button><button onclick="App.adminReviewWithdrawal('${w.id}', 'rechazada')" class="btn btn-red flex-1">✗ Rechazar</button></div>` : `<div class="mt-2 text-xs text-gray">${w.adminNote ? `<strong>Nota:</strong> ${w.adminNote}` : 'Sin notas'}</div>`}
+                    ${w.status === 'pendiente' ? `<div class="flex gap-2 mt-3"><button onclick="App.adminApproveWithdrawal('${w.id}')" class="btn btn-emerald flex-1">✓ Aprobar</button><button onclick="App.adminReviewWithdrawal('${w.id}', 'rechazada')" class="btn btn-red flex-1">✗ Rechazar</button></div>` : ''}
+                    ${w.status === 'aprobada' ? `<div class="mt-3"><p class="text-xs text-cyan font-bold mb-2">Transferir $${netAmount.toFixed(2)} a la cuenta del conductor y luego confirmar:</p><div class="form-group mb-2"><input type="text" id="wdr-ref-${w.id}" class="input" placeholder="Referencia de la transferencia bancaria"></div><div class="flex gap-2"><button onclick="App.adminRealizeWithdrawal('${w.id}')" class="btn btn-purple flex-1">✓ Transferencia Realizada</button></div></div>` : ''}
+                    ${w.status === 'realizado' ? `<div class="mt-2 p-2 bg-emerald rounded text-xs"><p class="font-bold text-emerald">✅ Transferencia realizada</p><p>Ref: <strong>${w.reference || '-'}</strong></p></div>` : ''}
+                    ${w.status === 'rechazada' ? `<div class="mt-2 text-xs text-gray">${w.adminNote ? `<strong>Motivo:</strong> ${w.adminNote}` : 'Rechazado'}</div>` : ''}
                 </div>`;
             });
         }
@@ -1128,6 +1161,20 @@ const App = {
         const note = status === 'rechazada' ? prompt('Motivo del rechazo (opcional):') || '' : '';
         await API.put(`/api/wallet/withdrawals/${id}`, { status, adminNote: note });
         this.showToast(`Retiro ${status}.`, 'success');
+        this.renderAdminDashboard();
+    },
+
+    async adminApproveWithdrawal(id) {
+        await API.put(`/api/wallet/withdrawals/${id}`, { status: 'aprobada', adminNote: 'Aprobado por administrador' });
+        this.showToast('Retiro aprobado. Ahora realiza la transferencia y confirma.', 'success');
+        this.renderAdminDashboard();
+    },
+
+    async adminRealizeWithdrawal(id) {
+        const ref = document.getElementById(`wdr-ref-${id}`)?.value?.trim();
+        if (!ref) { this.showToast('Ingresa la referencia de la transferencia.', 'error'); return; }
+        await API.put(`/api/wallet/withdrawals/${id}`, { status: 'realizado', reference: ref, adminNote: 'Transferencia bancaria realizada' });
+        this.showToast('Transferencia registrada. El conductor ha sido notificado.', 'success');
         this.renderAdminDashboard();
     },
 
@@ -1360,6 +1407,16 @@ const App = {
                 </div>
                 <button onclick="App.adminSaveBankConfig()" class="btn btn-purple w-full mt-2">Guardar Datos Bancarios</button>
             </div>
+            <div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3">💸 Comisión por Retiro de Conductores</h3>
+                <p class="text-xs text-gray mb-3">Porcentaje que TuRides cobra por cada retiro de conductor.</p>
+                <div class="form-group">
+                    <label>Comisión (%)</label>
+                    <input type="number" id="admin-cfg-commission" class="input" value="${config.withdrawalCommission || '10'}" min="0" max="50" step="0.5" placeholder="10">
+                </div>
+                <p class="text-xs text-gray">Ejemplo: Si un conductor retira $100 con 10% de comisión, recibe $90.</p>
+                <button onclick="App.adminSaveCommission()" class="btn btn-purple w-full mt-2">Guardar Comisión</button>
+            </div>
             <div class="glass-card">
                 <h3 class="text-lg font-bold mb-3">🔐 Seguridad de mi Cuenta</h3>
                 <p class="text-xs text-gray mb-3">Cambiar contraseña y configurar autenticación de dos factores.</p>
@@ -1488,6 +1545,14 @@ const App = {
         };
         await API.put('/api/config', data);
         this.showToast('Datos bancarios actualizados.', 'success');
+        this.renderAdminDashboard();
+    },
+
+    async adminSaveCommission() {
+        const pct = document.getElementById('admin-cfg-commission')?.value;
+        if (isNaN(pct) || pct < 0 || pct > 50) { this.showToast('Comision invalida (0-50%).', 'error'); return; }
+        await API.put('/api/config', { withdrawalCommission: String(pct) });
+        this.showToast(`Comision actualizada a ${pct}%.`, 'success');
         this.renderAdminDashboard();
     },
 

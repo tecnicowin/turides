@@ -121,7 +121,8 @@ const SEED_CONFIG = {
     phone: '0412-0000000',
     holderName: 'TuRides C.A.',
     bcvRate: '36.50',
-    bcvLastUpdate: new Date().toISOString()
+    bcvLastUpdate: new Date().toISOString(),
+    withdrawalCommission: '10'
 };
 
 function seedDB() {
@@ -133,7 +134,10 @@ function seedDB() {
         `ALTER TABLE transactions ADD COLUMN amountBs REAL DEFAULT 0`,
         `ALTER TABLE users ADD COLUMN twoFactorSecret TEXT DEFAULT NULL`,
         `ALTER TABLE users ADD COLUMN twoFactorEnabled INTEGER DEFAULT 0`,
-        `ALTER TABLE users ADD COLUMN passwordChanged INTEGER DEFAULT 0`
+        `ALTER TABLE users ADD COLUMN passwordChanged INTEGER DEFAULT 0`,
+        `ALTER TABLE withdrawals ADD COLUMN commission REAL DEFAULT 0`,
+        `ALTER TABLE withdrawals ADD COLUMN netAmount REAL DEFAULT 0`,
+        `ALTER TABLE withdrawals ADD COLUMN reference TEXT DEFAULT NULL`
     ];
     for (const sql of migrations) {
         try { db.exec(sql); } catch(e) { /* column already exists */ }
@@ -588,14 +592,18 @@ app.post('/api/wallet/withdraw', (req, res) => {
     if (conductor.balance < amount) return res.status(400).json({ error: 'Saldo insuficiente en billetera' });
     const bankInfo = JSON.parse(conductor.bankInfo || '{}');
     if (!bankInfo.bank || !bankInfo.account) return res.status(400).json({ error: 'Debes configurar tu cuenta bancaria en Configuracion primero' });
+    const config = getConfig();
+    const commissionPct = parseFloat(config.withdrawalCommission || '10');
+    const commission = parseFloat((amount * commissionPct / 100).toFixed(2));
+    const netAmount = parseFloat((amount - commission).toFixed(2));
     const id = 'WDR_' + Date.now();
     const now = new Date().toISOString();
     const amountBs = toBs(amount);
-    db.prepare('INSERT INTO withdrawals (id, conductorId, conductorName, amount, amountBs, bankInfo, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, conductorId, conductor.name, amount, amountBs, JSON.stringify(bankInfo), 'pendiente', now);
+    db.prepare('INSERT INTO withdrawals (id, conductorId, conductorName, amount, amountBs, commission, netAmount, bankInfo, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, conductorId, conductor.name, amount, amountBs, commission, netAmount, JSON.stringify(bankInfo), 'pendiente', now);
     db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(parseFloat((conductor.balance - amount).toFixed(2)), conductorId);
     const updated = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(conductorId));
     io.to('conductor_' + conductorId).emit('user:updated', updated);
-    io.emit('withdrawal:created', { id, conductorId, conductorName: conductor.name, amount, amountBs, status: 'pendiente' });
+    io.emit('withdrawal:created', { id, conductorId, conductorName: conductor.name, amount, amountBs, commission, netAmount, status: 'pendiente' });
     res.json({ success: true, id, message: 'Solicitud de retiro enviada. Pendiente de aprobacion por administrador.' });
 });
 
@@ -605,11 +613,11 @@ app.get('/api/wallet/withdrawals', (req, res) => {
 });
 
 app.put('/api/wallet/withdrawals/:id', (req, res) => {
-    const { status, adminNote } = req.body;
+    const { status, adminNote, reference } = req.body;
     const withdrawal = db.prepare('SELECT * FROM withdrawals WHERE id = ?').get(req.params.id);
     if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
     const now = new Date().toISOString();
-    db.prepare('UPDATE withdrawals SET status = ?, adminNote = ?, reviewedAt = ? WHERE id = ?').run(status, adminNote || '', now, req.params.id);
+    db.prepare('UPDATE withdrawals SET status = ?, adminNote = ?, reviewedAt = ?, reference = COALESCE(?, reference) WHERE id = ?').run(status, adminNote || '', now, reference || null, req.params.id);
     if (status === 'rechazada') {
         const conductor = db.prepare('SELECT * FROM users WHERE id = ?').get(withdrawal.conductorId);
         if (conductor) {
@@ -620,7 +628,9 @@ app.put('/api/wallet/withdrawals/:id', (req, res) => {
             io.to('conductor_' + withdrawal.conductorId).emit('withdrawal:rejected', { amount: withdrawal.amount, reason: adminNote });
         }
     } else if (status === 'aprobada') {
-        io.to('conductor_' + withdrawal.conductorId).emit('withdrawal:approved', { amount: withdrawal.amount });
+        io.to('conductor_' + withdrawal.conductorId).emit('withdrawal:approved', { amount: withdrawal.amount, netAmount: withdrawal.netAmount });
+    } else if (status === 'realizado') {
+        io.to('conductor_' + withdrawal.conductorId).emit('withdrawal:realized', { amount: withdrawal.amount, netAmount: withdrawal.netAmount, reference: reference || 'Sin referencia', note: adminNote });
     }
     io.emit('withdrawal:updated', { id: req.params.id, status });
     res.json({ success: true });
