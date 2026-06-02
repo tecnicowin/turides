@@ -1,35 +1,77 @@
 # TuRides - Log de Cambios y Estado del Proyecto
 
 ## Estado Actual
-- **Version**: 1.4.0
+- **Version**: 1.5.0
 - **Ultimo commit**: pendiente
 - **GitHub**: https://github.com/tecnicowin/turides
 - **Deploy**: https://turides.onrender.com
 - **Fecha**: 2026-06-02
 
 ## Archivos Principales
-- `server.js` - Backend Express + Socket.io + better-sqlite3
+- `server.js` - Backend Express + Socket.io + better-sqlite3 + otpauth + qrcode
 - `app.js` - Frontend SPA (logica cliente, conductor, admin)
 - `index.html` - Todas las vistas HTML
 - `style.css` - Estilos completos (dark theme glassmorphism)
-- `package.json` - Dependencias
+- `package.json` - Dependencias (incluye otpauth, qrcode)
 - `render.yaml` - Config deploy Render
 - `turides.db` - Base de datos SQLite (generada en runtime)
 
-## Cuentas Demo (Password: 123)
-- Admin: admin@turides.com
-- Cliente 1: cliente1@gmail.com
-- Cliente 2: cliente2@gmail.com
-- Conductor Carro (Fija): conductor1@turides.com
-- Conductor Carro (Km): conductor2@turides.com
-- Conductor Carro (Fija): conductor3@turides.com
-- Conductor Carro (Fija): conductor4@turides.com
-- Conductor Moto (Km): conductor5@turides.com
-- Conductor Moto (Fija): conductor6@turides.com
+## Cuentas Demo
+> **IMPORTANTE**: Tras el setup inicial, la cuenta admin se crea desde la app (primer login).
+> Las cuentas demo se usan solo si NO se ha completado el setup.
 
 ---
 
 ## Changelog Completo
+
+### v1.5.0 - 2026-06-02
+
+#### Seguridad: Setup Inicial del Administrador
+- **Flujo de primer login**: Al abrir la app sin admin, muestra pantalla de configuración
+- Admin crea su cuenta con nombre, email, teléfono y contraseña segura
+- La contraseña se guarda con `passwordChanged = 1` para indicar setup completado
+- Endpoint `GET /api/setup/status` verifica si ya existe admin configurado
+- Endpoint `POST /api/setup/admin` crea el primer admin (solo funciona si no hay admin)
+
+#### Seguridad: Cambio de Contraseña
+- Panel de "Seguridad de mi Cuenta" en todos los roles (admin, cliente, conductor)
+- Cambio de contraseña con validación de contraseña actual
+- Endpoint `POST /api/change-password` con protección de重複
+
+#### Seguridad: Autenticación 2FA (TOTP)
+- Integración con **otpauth** + **qrcode** para generar códigos TOTP
+- Compatible con **Authy**, **Google Authenticator**, **Microsoft Authenticator**
+- Flujo completo:
+  1. Usuario solicita activar 2FA → se genera secreto + QR code
+  2. Escanea QR con app de autenticación
+  3. Ingresa código de 6 dígitos para verificar
+  4. 2FA se activa en la cuenta
+- Login modificado: si 2FA activo, pide código antes de completar login
+- Endpoint `POST /api/2fa/setup` genera secreto + QR
+- Endpoint `POST /api/2fa/verify-and-enable` activa 2FA tras verificación
+- Endpoint `POST /api/2fa/disable` desactiva 2FA (requiere contraseña)
+- Endpoint `POST /api/login/2fa-verify` verifica código en login
+
+#### Admin: Configuración Bancaria
+- Panel "Configuración Bancaria y Seguridad" en admin dashboard
+- Configurar datos bancarios para recibir recargas de clientes:
+  - Banco (21 opciones venezolanas)
+  - Número de cuenta
+  - Titular
+  - Tipo/Número de documento
+  - Teléfono de contacto
+- Estos datos se muestran a los clientes al solicitar recarga
+
+#### Admin: Gestión de Retiros
+- Panel de soporte con visualización de retiros de conductores
+- Aprobar/rechazar solicitudes de retiro
+- Al rechazar, se devuelve el saldo al conductor
+- Notificaciones en tiempo real vía Socket.io
+
+#### Real-time Balance
+- Balance visible en navbar para clientes y conductores
+- Actualización en tiempo real vía Socket.io `user:updated`
+- Saldo en $ y Bs con tasa BCV actual
 
 ### v1.4.0 - 2026-06-02
 

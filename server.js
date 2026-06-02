@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const Database = require('better-sqlite3');
 const path = require('path');
+const OTPAuth = require('otpauth');
+const QRCode = require('qrcode');
 
 const app = express();
 const server = http.createServer(app);
@@ -140,7 +142,10 @@ function seedDB() {
         `ALTER TABLE trips ADD COLUMN priceBs REAL DEFAULT 0`,
         `ALTER TABLE trips ADD COLUMN fareMultiplier REAL DEFAULT 1.0`,
         `ALTER TABLE trips ADD COLUMN farePeriod TEXT DEFAULT 'normal'`,
-        `ALTER TABLE transactions ADD COLUMN amountBs REAL DEFAULT 0`
+        `ALTER TABLE transactions ADD COLUMN amountBs REAL DEFAULT 0`,
+        `ALTER TABLE users ADD COLUMN twoFactorSecret TEXT DEFAULT NULL`,
+        `ALTER TABLE users ADD COLUMN twoFactorEnabled INTEGER DEFAULT 0`,
+        `ALTER TABLE users ADD COLUMN passwordChanged INTEGER DEFAULT 0`
     ];
     for (const sql of migrations) {
         try { db.exec(sql); } catch(e) { /* column already exists */ }
@@ -165,8 +170,10 @@ seedDB();
 
 function parseUser(row) {
     if (!row) return null;
-    const { password, ...safe } = row;
+    const { password, twoFactorSecret, ...safe } = row;
     safe.available = !!safe.available;
+    safe.twoFactorEnabled = !!safe.twoFactorEnabled;
+    safe.passwordChanged = !!safe.passwordChanged;
     if (safe.vehicle) safe.vehicle = JSON.parse(safe.vehicle);
     if (safe.fixedTariffs) safe.fixedTariffs = JSON.parse(safe.fixedTariffs);
     if (safe.ratings) safe.ratings = JSON.parse(safe.ratings);
@@ -224,7 +231,94 @@ app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
     const row = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email.toLowerCase(), password);
     if (!row) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    if (row.twoFactorEnabled) {
+        return res.json({ twoFactorRequired: true, userId: row.id });
+    }
     res.json(parseUser(row));
+});
+
+app.post('/api/login/2fa-verify', (req, res) => {
+    const { userId, code } = req.body;
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!row) return res.status(401).json({ error: 'Usuario no encontrado' });
+    if (!row.twoFactorEnabled || !row.twoFactorSecret) return res.status(400).json({ error: '2FA no activo' });
+    const totp = new OTPAuth.TOTP({ issuer: 'TuRides', label: row.email, algorithm: 'SHA1', digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(row.twoFactorSecret) });
+    const delta = totp.validate({ token: code, window: 1 });
+    if (delta === null) return res.status(401).json({ error: 'Codigo 2FA incorrecto' });
+    res.json(parseUser(row));
+});
+
+// === FIRST-TIME ADMIN SETUP ===
+app.get('/api/setup/status', (req, res) => {
+    const adminCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get().c;
+    const adminWithPassword = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin' AND passwordChanged = 1").get().c;
+    res.json({ hasAdmin: adminCount > 0, adminSetupComplete: adminWithPassword > 0 });
+});
+
+app.post('/api/setup/admin', (req, res) => {
+    const adminCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get().c;
+    if (adminCount > 0) return res.status(400).json({ error: 'Ya existe un administrador. Inicia sesion para gestionar.' });
+    const { name, email, phone, password } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'Nombre, email y contraseña son requeridos' });
+    const id = email.toLowerCase();
+    db.prepare('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffMode, fixedTariffs, balance, ratings, bankInfo, passwordChanged) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, phone || null, email.toLowerCase(), password, 'admin', 0, null, null, null, 0, '[]', '{}', 1);
+    const user = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id));
+    io.emit('user:created', user);
+    res.json(user);
+});
+
+// === CHANGE PASSWORD ===
+app.post('/api/change-password', (req, res) => {
+    const { userId, currentPassword, newPassword } = req.body;
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (row.password !== currentPassword) return res.status(401).json({ error: 'Contrasena actual incorrecta' });
+    if (!newPassword || newPassword.length < 3) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 3 caracteres' });
+    db.prepare('UPDATE users SET password = ?, passwordChanged = 1 WHERE id = ?').run(newPassword, userId);
+    const updated = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId));
+    io.emit('user:updated', updated);
+    res.json({ success: true, message: 'Contrasena actualizada' });
+});
+
+// === 2FA SETUP ===
+app.post('/api/2fa/setup', (req, res) => {
+    const { userId } = req.body;
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (row.twoFactorEnabled) return res.status(400).json({ error: '2FA ya esta activo. Desactivalo primero.' });
+    const secret = new OTPAuth.Secret({ size: 20 });
+    const totp = new OTPAuth.TOTP({ issuer: 'TuRides', label: row.email, algorithm: 'SHA1', digits: 6, period: 30, secret });
+    db.prepare('UPDATE users SET twoFactorSecret = ? WHERE id = ?').run(secret.base32, userId);
+    const otpauthUrl = totp.toString();
+    QRCode.toDataURL(otpauthUrl, (err, dataUrl) => {
+        if (err) return res.status(500).json({ error: 'Error generando QR' });
+        res.json({ secret: secret.base32, qrCode: dataUrl, otpauthUrl });
+    });
+});
+
+app.post('/api/2fa/verify-and-enable', (req, res) => {
+    const { userId, code } = req.body;
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (!row.twoFactorSecret) return res.status(400).json({ error: 'Primero genera un secreto 2FA' });
+    const totp = new OTPAuth.TOTP({ issuer: 'TuRides', label: row.email, algorithm: 'SHA1', digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(row.twoFactorSecret) });
+    const delta = totp.validate({ token: code, window: 1 });
+    if (delta === null) return res.status(400).json({ error: 'Codigo incorrecto. Verifica tu app de autenticacion.' });
+    db.prepare('UPDATE users SET twoFactorEnabled = 1 WHERE id = ?').run(userId);
+    const updated = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId));
+    io.emit('user:updated', updated);
+    res.json({ success: true, message: '2FA activado correctamente' });
+});
+
+app.post('/api/2fa/disable', (req, res) => {
+    const { userId, password } = req.body;
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (row.password !== password) return res.status(401).json({ error: 'Contrasena incorrecta para desactivar 2FA' });
+    db.prepare('UPDATE users SET twoFactorEnabled = 0, twoFactorSecret = NULL WHERE id = ?').run(userId);
+    const updated = parseUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId));
+    io.emit('user:updated', updated);
+    res.json({ success: true, message: '2FA desactivado' });
 });
 
 app.post('/api/register', (req, res) => {
@@ -261,7 +355,7 @@ app.put('/api/users/:id', (req, res) => {
     if (updates.ratings && Array.isArray(updates.ratings)) updates.ratings = JSON.stringify(updates.ratings);
     if (updates.bankInfo && typeof updates.bankInfo === 'object') updates.bankInfo = JSON.stringify(updates.bankInfo);
     if (updates.available !== undefined) updates.available = updates.available ? 1 : 0;
-    const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'password');
+    const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'password' && k !== 'twoFactorSecret' && k !== 'twoFactorEnabled' && k !== 'passwordChanged');
     if (fields.length === 0) return res.json(parseUser(row));
     const setClause = fields.map(f => `${f} = ?`).join(', ');
     const values = fields.map(f => updates[f]);

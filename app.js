@@ -25,8 +25,14 @@ const App = {
     _TRIP_TIMEOUT_MS: 180000,
     _bcvRate: 36.50,
     _fareInfo: { period: 'normal', multiplier: 1.0 },
+    _setupStatus: null,
+    _twoFactorPending: false,
+    _twoFactorUserId: null,
+    _twoFactorQR: null,
+    _twoFactorSecret: null,
 
     async init() {
+        this._setupStatus = await API.get('/api/setup/status');
         const savedSession = localStorage.getItem('turides_session');
         if (savedSession) {
             try {
@@ -184,7 +190,11 @@ const App = {
     route() {
         if (!this.session) {
             this.stopConductorPolling();
-            this.showView('login');
+            if (this._setupStatus && !this._setupStatus.adminSetupComplete) {
+                this.showView('setup');
+            } else {
+                this.showView('login');
+            }
         } else {
             socket.emit('join', this.session.role + '_' + this.session.id);
             if (this.session.role === 'conductor') this.startConductorPolling();
@@ -255,10 +265,61 @@ const App = {
             const email = document.getElementById('login-email').value;
             const pass = document.getElementById('login-password').value;
             try {
-                const user = await API.post('/api/login', { email, password: pass });
-                if (user.error) { this.showToast(user.error, 'error'); return; }
-                this.session = user;
-                localStorage.setItem('turides_session', JSON.stringify(user));
+                const result = await API.post('/api/login', { email, password: pass });
+                if (result.error) { this.showToast(result.error, 'error'); return; }
+                if (result.twoFactorRequired) {
+                    this._twoFactorPending = true;
+                    this._twoFactorUserId = result.userId;
+                    document.getElementById('login-card').style.display = 'none';
+                    document.getElementById('twofa-card').style.display = 'block';
+                    document.getElementById('twofa-code').value = '';
+                    document.getElementById('twofa-code').focus();
+                    return;
+                }
+                this.session = result;
+                localStorage.setItem('turides_session', JSON.stringify(result));
+                this._setupStatus = await API.get('/api/setup/status');
+                this.route();
+            } catch(err) { this.showToast('Error de conexion.', 'error'); }
+        });
+
+        document.getElementById('twofa-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const code = document.getElementById('twofa-code').value;
+            try {
+                const result = await API.post('/api/login/2fa-verify', { userId: this._twoFactorUserId, code });
+                if (result.error) { this.showToast(result.error, 'error'); return; }
+                this._twoFactorPending = false;
+                this._twoFactorUserId = null;
+                document.getElementById('twofa-card').style.display = 'none';
+                document.getElementById('login-card').style.display = 'block';
+                this.session = result;
+                localStorage.setItem('turides_session', JSON.stringify(result));
+                this.route();
+            } catch(err) { this.showToast('Error de conexion.', 'error'); }
+        });
+
+        document.getElementById('twofa-cancel')?.addEventListener('click', () => {
+            this._twoFactorPending = false;
+            this._twoFactorUserId = null;
+            document.getElementById('twofa-card').style.display = 'none';
+            document.getElementById('login-card').style.display = 'block';
+        });
+
+        document.getElementById('setup-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('setup-name').value;
+            const email = document.getElementById('setup-email').value;
+            const phone = document.getElementById('setup-phone').value;
+            const password = document.getElementById('setup-password').value;
+            const confirm = document.getElementById('setup-confirm').value;
+            if (password !== confirm) { this.showToast('Las contrasenas no coinciden', 'error'); return; }
+            try {
+                const result = await API.post('/api/setup/admin', { name, email, phone, password });
+                if (result.error) { this.showToast(result.error, 'error'); return; }
+                this.showToast('Administrador creado! Ahora inicia sesion.', 'success');
+                this._setupStatus = await API.get('/api/setup/status');
+                document.getElementById('view-setup').querySelectorAll('input').forEach(i => i.value = '');
                 this.route();
             } catch(err) { this.showToast('Error de conexion.', 'error'); }
         });
@@ -666,7 +727,30 @@ const App = {
             html += `</div>`;
         }
         html += `</div>`;
+
+        html += `
+            <div class="glass-card mt-4">
+                <h3 class="text-lg font-bold mb-3">🔐 Seguridad de mi Cuenta</h3>
+                <p class="text-xs text-gray mb-3">Cambiar contraseña y configurar autenticación de dos factores.</p>
+                <div class="form-group">
+                    <label>Contraseña Actual</label>
+                    <input type="password" id="sec-current-pw" class="input" placeholder="Tu contraseña actual">
+                </div>
+                <div class="form-group">
+                    <label>Nueva Contraseña</label>
+                    <input type="password" id="sec-new-pw" class="input" placeholder="Mínimo 3 caracteres">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Nueva Contraseña</label>
+                    <input type="password" id="sec-confirm-pw" class="input" placeholder="Repite la nueva contraseña">
+                </div>
+                <button onclick="App.changePassword()" class="btn btn-purple w-full">Cambiar Contraseña</button>
+                <hr class="my-4 border-gray">
+                <div id="twofa-status-panel"></div>
+            </div>`;
+
         walletEl.innerHTML = html;
+        this.renderTwoFactorStatus();
     },
 
     async requestWithdrawal() {
@@ -744,11 +828,12 @@ const App = {
         if (bcvRateEl) bcvRateEl.value = config.bcvRate || '36.50';
 
         const usersTable = document.getElementById('admin-users-list');
-        let html = '<table class="table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Vehiculo</th><th>Billetera</th><th>Rating</th></tr></thead><tbody>';
+        let html = '<table class="table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Vehiculo</th><th>Billetera</th><th>2FA</th><th>Rating</th></tr></thead><tbody>';
         users.forEach(u => {
             const vt = u.role === 'conductor' ? `${u.vehicle?.type === 'moto' ? '🏍️' : '🚗'} ${u.vehicle?.brand} ${u.vehicle?.model}` : '-';
             const avg = u.ratings?.length > 0 ? (u.ratings.reduce((a, b) => a + b, 0) / u.ratings.length).toFixed(1) : '-';
-            html += `<tr><td><strong>${u.name}</strong></td><td>${u.email}</td><td><span class="badge ${u.role === 'conductor' ? 'text-purple' : 'text-cyan'}">${u.role.toUpperCase()}</span></td><td>${vt}</td><td class="font-bold text-emerald">$${(u.balance || 0).toFixed(2)} <span class="text-xs text-gray">Bs ${this.toBs(u.balance || 0)}</span></td><td>${avg !== '-' ? this.renderStarsSmall(avg, u.ratings.length) : '-'}</td></tr>`;
+            const tfa = u.twoFactorEnabled ? '<span class="badge text-emerald">ON</span>' : '<span class="badge text-gray">OFF</span>';
+            html += `<tr><td><strong>${u.name}</strong></td><td>${u.email}</td><td><span class="badge ${u.role === 'conductor' ? 'text-purple' : u.role === 'admin' ? 'text-red' : 'text-cyan'}">${u.role.toUpperCase()}</span></td><td>${vt}</td><td class="font-bold text-emerald">$${(u.balance || 0).toFixed(2)} <span class="text-xs text-gray">Bs ${this.toBs(u.balance || 0)}</span></td><td>${tfa}</td><td>${avg !== '-' ? this.renderStarsSmall(avg, u.ratings.length) : '-'}</td></tr>`;
         });
         html += '</tbody></table>';
         usersTable.innerHTML = html;
@@ -768,6 +853,8 @@ const App = {
                 txnTable.innerHTML = txnHtml;
             }
         }
+
+        this.renderAdminBankConfig(config);
 
         try { this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
     },
@@ -921,7 +1008,30 @@ const App = {
             html += '</tbody></table>';
         }
         html += `</div>`;
+
+        html += `
+            <div class="glass-card mt-4">
+                <h3 class="text-lg font-bold mb-3">🔐 Seguridad de mi Cuenta</h3>
+                <p class="text-xs text-gray mb-3">Cambiar contraseña y configurar autenticación de dos factores.</p>
+                <div class="form-group">
+                    <label>Contraseña Actual</label>
+                    <input type="password" id="sec-current-pw" class="input" placeholder="Tu contraseña actual">
+                </div>
+                <div class="form-group">
+                    <label>Nueva Contraseña</label>
+                    <input type="password" id="sec-new-pw" class="input" placeholder="Mínimo 3 caracteres">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Nueva Contraseña</label>
+                    <input type="password" id="sec-confirm-pw" class="input" placeholder="Repite la nueva contraseña">
+                </div>
+                <button onclick="App.changePassword()" class="btn btn-purple w-full">Cambiar Contraseña</button>
+                <hr class="my-4 border-gray">
+                <div id="twofa-status-panel"></div>
+            </div>`;
+
         settingsEl.innerHTML = html;
+        this.renderTwoFactorStatus();
     },
 
     async submitRecharge() {
@@ -976,6 +1086,202 @@ const App = {
         let h = '<span class="stars-display">';
         for (let i = 1; i <= 5; i++) { h += i <= full ? '<span class="star-filled">★</span>' : i === full + 1 && half ? '<span class="star-half">★</span>' : '<span class="star-empty">★</span>'; }
         return h + `</span> <span class="text-xs text-gray">(${avg} · ${count})</span>`;
+    },
+
+    renderAdminBankConfig(config) {
+        const container = document.getElementById('admin-bank-config');
+        if (!container) return;
+        const banks = [
+            { code: '0102', name: 'Banco de Venezuela' },
+            { code: '0104', name: 'Banco Provincial' },
+            { code: '0105', name: 'Banco Mercantil' },
+            { code: '0108', name: 'Banco BBVA' },
+            { code: '0114', name: 'Banco Bancaribe' },
+            { code: '0116', name: 'Banco Plaza' },
+            { code: '0128', name: 'Banco Occidental' },
+            { code: '0134', name: 'Banco Venezolano de Credito' },
+            { code: '0151', name: 'Banco BFC' },
+            { code: '0156', name: '100% Banco' },
+            { code: '0157', name: 'Banco Del Tesoro' },
+            { code: '0163', name: 'Banco Guerra' },
+            { code: '0168', name: 'Bancrecer' },
+            { code: '0169', name: 'Mi Banco' },
+            { code: '0171', name: 'Banco del Pueblo Soberano' },
+            { code: '0172', name: 'Bancamiga' },
+            { code: '0173', name: 'Banco Internacional' },
+            { code: '0174', name: 'Banplus' },
+            { code: '0175', name: 'Bicentenario' },
+            { code: '0177', name: 'Banco Facilito' },
+            { code: '0185', name: 'Fondo Comun' }
+        ];
+        const bankOptions = banks.map(b => `<option value="${b.code}" ${config.bankName === b.name ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('');
+
+        container.innerHTML = `
+            <div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3">🏦 Datos Bancarios para Recargas (TuRides)</h3>
+                <p class="text-xs text-gray mb-3">Configura los datos que verán los clientes al recargar su billetera.</p>
+                <div class="form-group">
+                    <label>Banco</label>
+                    <select id="admin-cfg-bank" class="input">${bankOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label>Número de Cuenta</label>
+                    <input type="text" id="admin-cfg-account" class="input" value="${config.accountNumber || ''}" placeholder="0102-0000-0000-0000-0000">
+                </div>
+                <div class="form-group">
+                    <label>Titular</label>
+                    <input type="text" id="admin-cfg-holder" class="input" value="${config.holderName || ''}" placeholder="TuRides C.A.">
+                </div>
+                <div class="grid grid-2 gap-3">
+                    <div class="form-group">
+                        <label>Tipo Documento</label>
+                        <select id="admin-cfg-doctype" class="input">
+                            <option value="V" ${config.documentType === 'V' ? 'selected' : ''}>V</option>
+                            <option value="E" ${config.documentType === 'E' ? 'selected' : ''}>E</option>
+                            <option value="J" ${config.documentType === 'J' ? 'selected' : ''}>J</option>
+                            <option value="G" ${config.documentType === 'G' ? 'selected' : ''}>G</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Número Documento</label>
+                        <input type="text" id="admin-cfg-docnum" class="input" value="${config.documentNumber || ''}" placeholder="00000000">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono de Contacto</label>
+                    <input type="tel" id="admin-cfg-phone" class="input" value="${config.phone || ''}" placeholder="0412-0000000">
+                </div>
+                <button onclick="App.adminSaveBankConfig()" class="btn btn-purple w-full mt-2">Guardar Datos Bancarios</button>
+            </div>
+            <div class="glass-card">
+                <h3 class="text-lg font-bold mb-3">🔐 Seguridad de mi Cuenta</h3>
+                <p class="text-xs text-gray mb-3">Cambiar contraseña y configurar autenticación de dos factores.</p>
+                <div class="form-group">
+                    <label>Contraseña Actual</label>
+                    <input type="password" id="sec-current-pw" class="input" placeholder="Tu contraseña actual">
+                </div>
+                <div class="form-group">
+                    <label>Nueva Contraseña</label>
+                    <input type="password" id="sec-new-pw" class="input" placeholder="Mínimo 4 caracteres">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Nueva Contraseña</label>
+                    <input type="password" id="sec-confirm-pw" class="input" placeholder="Repite la nueva contraseña">
+                </div>
+                <button onclick="App.changePassword()" class="btn btn-purple w-full">Cambiar Contraseña</button>
+                <hr class="my-4 border-gray">
+                <div id="twofa-status-panel"></div>
+            </div>`;
+        this.renderTwoFactorStatus();
+    },
+
+    async renderTwoFactorStatus() {
+        const panel = document.getElementById('twofa-status-panel');
+        if (!panel || !this.session) return;
+        const user = await API.get(`/api/users/${this.session.id}`);
+        if (user.twoFactorEnabled) {
+            panel.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <p class="font-bold text-emerald">2FA Activo</p>
+                        <p class="text-xs text-gray">Tu cuenta tiene autenticación de dos factores habilitada.</p>
+                    </div>
+                    <span class="badge text-emerald">✓ ACTIVO</span>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña para desactivar 2FA</label>
+                    <input type="password" id="twofa-disable-pw" class="input" placeholder="Tu contraseña actual">
+                </div>
+                <button onclick="App.disable2FA()" class="btn btn-red w-full">Desactivar 2FA</button>`;
+        } else {
+            panel.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <p class="font-bold text-cyan">2FA Inactivo</p>
+                        <p class="text-xs text-gray">Protege tu cuenta con autenticación de dos factores (Authy, Google Authenticator).</p>
+                    </div>
+                    <span class="badge text-gray">INACTIVO</span>
+                </div>
+                <button onclick="App.setup2FA()" class="btn btn-emerald w-full">Activar 2FA</button>`;
+        }
+    },
+
+    async setup2FA() {
+        const result = await API.post('/api/2fa/setup', { userId: this.session.id });
+        if (result.error) { this.showToast(result.error, 'error'); return; }
+        const panel = document.getElementById('twofa-status-panel');
+        if (!panel) return;
+        this._twoFactorSecret = result.secret;
+        this._twoFactorQR = result.qrCode;
+        panel.innerHTML = `
+            <div class="text-center mb-4">
+                <p class="font-bold text-emerald mb-2">Escanea este código con tu app de autenticación</p>
+                <img src="${result.qrCode}" alt="QR 2FA" class="mx-auto" style="max-width: 200px; border-radius: 12px;">
+                <p class="text-xs text-gray mt-2">Busca "TuRides" en tu app Authy / Google Authenticator</p>
+                <div class="mt-3 p-3 bg-gray rounded">
+                    <p class="text-xs text-gray mb-1">Si no puedes escanear, ingresa este código manualmente:</p>
+                    <code class="text-sm font-bold text-purple select-all">${result.secret}</code>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Ingresa el código de 6 dígitos para verificar</label>
+                <input type="text" id="twofa-verify-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" class="input" style="text-align: center; font-size: 1.3rem; letter-spacing: 0.4em;">
+            </div>
+            <button onclick="App.verifyAndEnable2FA()" class="btn btn-emerald w-full">Verificar y Activar 2FA</button>
+            <button onclick="App.renderTwoFactorStatus()" class="btn btn-ghost w-full mt-2 text-sm">Cancelar</button>`;
+    },
+
+    async verifyAndEnable2FA() {
+        const code = document.getElementById('twofa-verify-code')?.value;
+        if (!code || code.length !== 6) { this.showToast('Ingresa un código de 6 dígitos.', 'error'); return; }
+        const result = await API.post('/api/2fa/verify-and-enable', { userId: this.session.id, code });
+        if (result.error) { this.showToast(result.error, 'error'); return; }
+        this.showToast('2FA activado correctamente!', 'success');
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        this.renderTwoFactorStatus();
+    },
+
+    async disable2FA() {
+        const pw = document.getElementById('twofa-disable-pw')?.value;
+        if (!pw) { this.showToast('Ingresa tu contraseña.', 'error'); return; }
+        const result = await API.post('/api/2fa/disable', { userId: this.session.id, password: pw });
+        if (result.error) { this.showToast(result.error, 'error'); return; }
+        this.showToast('2FA desactivado.', 'info');
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        this.renderTwoFactorStatus();
+    },
+
+    async changePassword() {
+        const current = document.getElementById('sec-current-pw')?.value;
+        const newPw = document.getElementById('sec-new-pw')?.value;
+        const confirm = document.getElementById('sec-confirm-pw')?.value;
+        if (!current || !newPw) { this.showToast('Completa todos los campos.', 'error'); return; }
+        if (newPw !== confirm) { this.showToast('Las contraseñas no coinciden.', 'error'); return; }
+        if (newPw.length < 3) { this.showToast('Mínimo 3 caracteres.', 'error'); return; }
+        const result = await API.post('/api/change-password', { userId: this.session.id, currentPassword: current, newPassword: newPw });
+        if (result.error) { this.showToast(result.error, 'error'); return; }
+        this.showToast('Contraseña actualizada!', 'success');
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        document.getElementById('sec-current-pw').value = '';
+        document.getElementById('sec-new-pw').value = '';
+        document.getElementById('sec-confirm-pw').value = '';
+    },
+
+    async adminSaveBankConfig() {
+        const data = {
+            bankName: document.getElementById('admin-cfg-bank')?.selectedOptions[0]?.text || '',
+            accountNumber: document.getElementById('admin-cfg-account')?.value || '',
+            holderName: document.getElementById('admin-cfg-holder')?.value || '',
+            documentType: document.getElementById('admin-cfg-doctype')?.value || '',
+            documentNumber: document.getElementById('admin-cfg-docnum')?.value || '',
+            phone: document.getElementById('admin-cfg-phone')?.value || ''
+        };
+        await API.put('/api/config', data);
+        this.showToast('Datos bancarios actualizados.', 'success');
+        this.renderAdminDashboard();
     },
 
     logout() {

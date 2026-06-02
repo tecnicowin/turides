@@ -48,6 +48,60 @@
 
     <main class="app-container">
 
+        <!-- FIRST-TIME ADMIN SETUP -->
+        <section id="view-setup" class="app-view" style="display: none;">
+            <div class="welcome-grid">
+                <div class="welcome-info">
+                    <h1 class="brand-title">TuRides</h1>
+                    <p class="brand-tagline">Configuración Inicial del Administrador</p>
+                    <div class="feature-bullets">
+                        <div class="bullet-item">
+                            <span class="bullet-icon">🔐</span>
+                            <div>
+                                <h4>Seguridad Primero</h4>
+                                <p>Crea tu cuenta de administrador con una contraseña segura. Podrás activar verificación 2FA después.</p>
+                            </div>
+                        </div>
+                        <div class="bullet-item">
+                            <span class="bullet-icon">⚙️</span>
+                            <div>
+                                <h4>Configuración Completa</h4>
+                                <p>Administra tarifas, conductores, clientes, recargas, retiros y toda la plataforma desde un solo lugar.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="auth-card-container">
+                    <div class="glass-card auth-card">
+                        <h2 class="text-2xl font-bold mb-2">🔧 Crear Administrador</h2>
+                        <p class="text-gray mb-4 text-sm">Este paso solo se realiza una vez. Los datos de acceso serán los que uses para entrar a TuRides.</p>
+                        <form id="setup-form">
+                            <div class="form-group">
+                                <label for="setup-name">Nombre y Apellido</label>
+                                <input type="text" id="setup-name" required placeholder="Ej. Juan Perez" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="setup-email">Correo Electrónico</label>
+                                <input type="email" id="setup-email" required placeholder="admin@turides.com" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="setup-phone">Teléfono (opcional)</label>
+                                <input type="tel" id="setup-phone" placeholder="0412-5556677" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="setup-password">Contraseña</label>
+                                <input type="password" id="setup-password" required minlength="4" placeholder="Mínimo 4 caracteres" class="input">
+                            </div>
+                            <div class="form-group">
+                                <label for="setup-confirm">Confirmar Contraseña</label>
+                                <input type="password" id="setup-confirm" required minlength="4" placeholder="Repite la contraseña" class="input">
+                            </div>
+                            <button type="submit" class="btn btn-purple w-full mt-4">Crear Cuenta Admin</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
         <!-- LOGIN & REGISTRO -->
         <section id="view-login" class="app-view">
             <div class="welcome-grid">
@@ -104,9 +158,21 @@
                                 <li>Conductor Kilómetros: conductor2@turides.com</li>
                                 <li>Conductor Moto: conductor5@turides.com</li>
                                 <li>Cliente: cliente1@gmail.com</li>
-                                <li>Admin: admin@turides.com</li>
                             </ul>
                         </div>
+                    </div>
+
+                    <div id="twofa-card" class="glass-card auth-card" style="display: none;">
+                        <h2 class="text-2xl font-bold mb-2">🔒 Verificación 2FA</h2>
+                        <p class="text-gray mb-6 text-sm">Ingresa el código de 6 dígitos de tu app de autenticación (Authy, Google Authenticator, etc.)</p>
+                        <form id="twofa-form">
+                            <div class="form-group">
+                                <label for="twofa-code">Código de Verificación</label>
+                                <input type="text" id="twofa-code" required maxlength="6" pattern="[0-9]{6}" placeholder="000000" class="input" autocomplete="one-time-code" style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5em;">
+                            </div>
+                            <button type="submit" class="btn btn-purple w-full mt-4">Verificar</button>
+                        </form>
+                        <button id="twofa-cancel" class="btn btn-ghost w-full mt-2 text-sm">← Volver al Login</button>
                     </div>
 
                     <div id="register-card" class="glass-card auth-card" style="display: none;">
@@ -346,6 +412,11 @@
                 <h2 class="text-xl font-bold mb-4">🛠️ Panel de Soporte <span id="admin-stat-pending" class="badge text-cyan">0</span></h2>
                 <p class="text-xs text-gray mb-4">Gestiona recargas de clientes y retiros de conductores.</p>
                 <div id="admin-support-panel"></div>
+            </div>
+
+            <div class="glass-card mt-4">
+                <h2 class="text-xl font-bold mb-4">🏦 Configuración Bancaria y Seguridad</h2>
+                <div id="admin-bank-config"></div>
             </div>
         </section>
 
