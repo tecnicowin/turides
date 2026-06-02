@@ -752,6 +752,34 @@ const App = {
         const bankInfo = this.session.bankInfo || {};
         const hasBank = bankInfo.bank && bankInfo.account;
 
+        const trips = await API.get('/api/trips');
+        const myCompleted = trips.filter(t => t.conductorId === this.session.id && t.status === 'pago_verificado');
+        const totalEarned = myCompleted.reduce((acc, t) => acc + t.price, 0);
+
+        const banks = [
+            { code: '0102', name: 'Banco de Venezuela' },
+            { code: '0104', name: 'Banco Provincial' },
+            { code: '0105', name: 'Banco Mercantil' },
+            { code: '0108', name: 'Banco BBVA' },
+            { code: '0114', name: 'Banco Bancaribe' },
+            { code: '0116', name: 'Banco Plaza' },
+            { code: '0128', name: 'Banco Occidental' },
+            { code: '0134', name: 'Banco Venezolano de Credito' },
+            { code: '0151', name: 'Banco BFC' },
+            { code: '0156', name: '100% Banco' },
+            { code: '0157', name: 'Banco Del Tesoro' },
+            { code: '0163', name: 'Banco Guerra' },
+            { code: '0168', name: 'Bancrecer' },
+            { code: '0169', name: 'Mi Banco' },
+            { code: '0171', name: 'Banco del Pueblo Soberano' },
+            { code: '0172', name: 'Bancamiga' },
+            { code: '0173', name: 'Banco Internacional' },
+            { code: '0174', name: 'Banplus' },
+            { code: '0175', name: 'Bicentenario' },
+            { code: '0177', name: 'Banco Facilito' },
+            { code: '0185', name: 'Fondo Comun' }
+        ];
+
         let html = `
             <div class="glass-card mb-4">
                 <h3 class="text-lg font-bold mb-3 flex items-center gap-2">💰 Mi Billetera</h3>
@@ -763,29 +791,75 @@ const App = {
                     </div>
                 </div>
                 <div class="p-3 bg-gray rounded mb-3">
-                    <p class="text-xs text-gray">Cuenta bancaria registrada:</p>
-                    <p class="text-sm font-bold">${hasBank ? `${bankInfo.bank} - ${bankInfo.account}` : 'No configurada'}</p>
+                    <p class="text-xs text-gray">Total ganado (viajes completados):</p>
+                    <p class="text-sm font-bold text-emerald">$${totalEarned.toFixed(2)} <span class="text-xs text-gray">(Bs ${this.toBs(totalEarned)})</span> <span class="text-xs text-cyan">| ${myCompleted.length} viajes</span></p>
                 </div>`;
 
         if (hasBank) {
             html += `
+                <div class="p-3 bg-gray rounded mb-3">
+                    <p class="text-xs text-gray">Cuenta bancaria registrada:</p>
+                    <p class="text-sm font-bold">${bankInfo.bank} - ${bankInfo.account}</p>
+                    <p class="text-xs text-gray">Titular: ${bankInfo.name || '-'} | Tel: ${bankInfo.phone || '-'}</p>
+                </div>`;
+        }
+
+        html += `</div>`;
+
+        html += `
+            <div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3">🏦 ${hasBank ? 'Actualizar Cuenta Bancaria' : 'Configurar Cuenta Bancaria'}</h3>
+                <p class="text-xs text-gray mb-3">${hasBank ? 'Modifica los datos de tu cuenta para recibir retiros.' : 'Ingresa los datos de tu cuenta para poder solicitar retiros.'}</p>
                 <div class="form-group">
-                    <label>Monto a retirar ($)</label>
-                    <input type="number" id="withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 20.00" class="input">
+                    <label>Banco</label>
+                    <select id="driver-bank-select" class="input">
+                        <option value="">Seleccionar banco</option>
+                        ${banks.map(b => `<option value="${b.code}" ${bankInfo.bank === b.code ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('')}
+                    </select>
                 </div>
-                <button onclick="App.requestWithdrawal()" class="btn btn-emerald w-full">Solicitar Retiro a Cuenta Bancaria</button>`;
-        } else {
-            html += `<p class="text-xs text-red text-center">Configura tu cuenta bancaria en Configuracion para poder retirar.</p>`;
+                <div class="form-group">
+                    <label>Número de Cuenta</label>
+                    <input type="text" id="driver-bank-account" class="input" value="${bankInfo.account || ''}" placeholder="Ej. 0102-1234-5678-9012">
+                </div>
+                <div class="form-group">
+                    <label>Teléfono (Pago Móvil)</label>
+                    <input type="tel" id="driver-bank-phone" class="input" value="${bankInfo.phone || this.session.phone || ''}" placeholder="0412-5556677">
+                </div>
+                <div class="form-group">
+                    <label>Nombre del Titular</label>
+                    <input type="text" id="driver-bank-name" class="input" value="${bankInfo.name || this.session.name || ''}" placeholder="Nombre como aparece en el banco">
+                </div>
+                <button onclick="App.saveDriverBankInfo()" class="btn btn-purple w-full">Guardar Cuenta Bancaria</button>
+            </div>`;
+
+        if (hasBank) {
+            html += `
+                <div class="glass-card mb-4">
+                    <h3 class="text-lg font-bold mb-3">💸 Solicitar Retiro</h3>
+                    <div class="form-group">
+                        <label>Monto a retirar ($)</label>
+                        <input type="number" id="withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 20.00" class="input">
+                    </div>
+                    <button onclick="App.requestWithdrawal()" class="btn btn-emerald w-full">Solicitar Retiro a Cuenta Bancaria</button>
+                </div>`;
         }
 
         if (pendingW.length > 0) {
-            html += `<div class="mt-3"><p class="text-xs text-cyan font-bold mb-1">Retiros Pendientes:</p>`;
+            html += `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-cyan">⏳ Retiros Pendientes (${pendingW.length})</h3>`;
             pendingW.forEach(w => {
-                html += `<div class="p-2 bg-gray rounded mb-1 flex justify-between text-xs"><span>$${w.amount.toFixed(2)} (Bs ${w.amountBs})</span><span class="badge text-cyan">Pendiente</span></div>`;
+                html += `<div class="p-3 bg-gray rounded mb-2 flex justify-between items-center"><div><span class="font-bold text-emerald">$${w.amount.toFixed(2)}</span> <span class="text-xs text-gray">(Bs ${w.amountBs})</span></div><span class="badge text-cyan">Pendiente</span></div>`;
             });
             html += `</div>`;
         }
-        html += `</div>`;
+
+        if (approvedW.length > 0) {
+            html += `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-emerald">✅ Retiros Aprobados (${approvedW.length})</h3>`;
+            approvedW.slice(0, 5).forEach(w => {
+                const date = w.reviewedAt ? new Date(w.reviewedAt).toLocaleDateString() : '-';
+                html += `<div class="p-2 bg-gray rounded mb-1 flex justify-between text-xs"><span>$${w.amount.toFixed(2)} - ${date}</span><span class="badge text-emerald">Aprobado</span></div>`;
+            });
+            html += `</div>`;
+        }
 
         html += `
             <div class="glass-card mt-4">
@@ -810,6 +884,22 @@ const App = {
 
         walletEl.innerHTML = html;
         this.renderTwoFactorStatus();
+    },
+
+    async saveDriverBankInfo() {
+        const bank = document.getElementById('driver-bank-select')?.value;
+        const account = document.getElementById('driver-bank-account')?.value?.trim();
+        const phone = document.getElementById('driver-bank-phone')?.value?.trim();
+        const name = document.getElementById('driver-bank-name')?.value?.trim();
+        if (!bank) { this.showToast('Selecciona un banco.', 'error'); return; }
+        if (!account || account.length < 10) { this.showToast('Numero de cuenta invalido.', 'error'); return; }
+        if (!name) { this.showToast('Nombre del titular requerido.', 'error'); return; }
+        const bankInfo = { bank, account, phone, name };
+        await API.put(`/api/users/${this.session.id}`, { bankInfo });
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        this.showToast('Cuenta bancaria guardada.', 'success');
+        this.renderConductorWallet();
     },
 
     async requestWithdrawal() {
@@ -949,20 +1039,35 @@ const App = {
         if (withdrawals.length === 0) {
             html += `<p class="text-center text-gray p-4">No hay solicitudes de retiro.</p>`;
         } else {
-            html += '<table class="table"><thead><tr><th>ID</th><th>Conductor</th><th>Monto</th><th>Cuenta</th><th>Estado</th><th>Accion</th></tr></thead><tbody>';
             withdrawals.forEach(w => {
                 const statusColor = w.status === 'aprobada' ? 'text-emerald' : w.status === 'rechazada' ? 'text-red' : 'text-cyan';
                 const bInfo = JSON.parse(w.bankInfo || '{}');
-                html += `<tr>
-                    <td class="text-xs font-mono">${w.id.slice(-8)}</td>
-                    <td><strong>${w.conductorName}</strong></td>
-                    <td class="font-bold text-emerald">$${w.amount.toFixed(2)} <span class="text-xs">Bs ${this.toBs(w.amount)}</span></td>
-                    <td class="text-xs">${bInfo.bank || '-'} ${bInfo.account || ''}</td>
-                    <td><span class="badge ${statusColor}">${w.status.toUpperCase()}</span></td>
-                    <td>${w.status === 'pendiente' ? `<div class="flex gap-1"><button onclick="App.adminReviewWithdrawal('${w.id}', 'aprobada')" class="btn btn-emerald btn-sm">✓</button><button onclick="App.adminReviewWithdrawal('${w.id}', 'rechazada')" class="btn btn-red btn-sm">✗</button></div>` : '<span class="text-xs text-gray">' + (w.adminNote || 'Revisado') + '</span>'}</td>
-                </tr>`;
+                const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+                const bankName = bankNames[bInfo.bank] || bInfo.bank || '-';
+
+                html += `<div class="glass-card mb-3 p-4 border-l-purple">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 class="font-bold text-purple">${w.conductorName}</h4>
+                            <p class="text-xs text-gray">Solicitud: ${w.id}</p>
+                        </div>
+                        <span class="badge ${statusColor}">${w.status.toUpperCase()}</span>
+                    </div>
+                    <div class="grid grid-2 gap-2 mb-2 text-xs">
+                        <div class="p-2 bg-gray rounded"><span class="text-gray">Monto:</span><br><strong class="text-emerald text-lg">$${w.amount.toFixed(2)}</strong> <span class="text-gray">Bs ${w.amountBs}</span></div>
+                        <div class="p-2 bg-gray rounded"><span class="text-gray">Cuenta destino:</span><br><strong>${bankName}</strong><br><span class="font-mono">${bInfo.account || '-'}</span></div>
+                    </div>
+                    <div class="grid grid-2 gap-2 mb-2 text-xs">
+                        <div class="p-2 bg-gray rounded"><span class="text-gray">Titular:</span><br><strong>${bInfo.name || '-'}</strong></div>
+                        <div class="p-2 bg-gray rounded"><span class="text-gray">Tel:</span><br><strong>${bInfo.phone || '-'}</strong></div>
+                    </div>
+                    <div class="p-2 bg-gray rounded mb-2 text-xs">
+                        <span class="text-gray">Fecha solicitud:</span> <strong>${w.createdAt ? new Date(w.createdAt).toLocaleString() : '-'}</strong>
+                        ${w.reviewedAt ? `<span class="ml-3 text-gray">Revisado:</span> <strong>${new Date(w.reviewedAt).toLocaleString()}</strong>` : ''}
+                    </div>
+                    ${w.status === 'pendiente' ? `<div class="flex gap-2 mt-3"><button onclick="App.adminReviewWithdrawal('${w.id}', 'aprobada')" class="btn btn-emerald flex-1">✓ Aprobar Retiro</button><button onclick="App.adminReviewWithdrawal('${w.id}', 'rechazada')" class="btn btn-red flex-1">✗ Rechazar</button></div>` : `<div class="mt-2 text-xs text-gray">${w.adminNote ? `<strong>Nota:</strong> ${w.adminNote}` : 'Sin notas'}</div>`}
+                </div>`;
             });
-            html += '</tbody></table>';
         }
         html += `</div>`;
 
