@@ -4,9 +4,11 @@ let pool;
 
 function getPool() {
     if (!pool) {
-        const connStr = process.env.DATABASE_URL;
+        let connStr = process.env.DATABASE_URL;
         if (connStr) {
-            pool = new Pool({ connectionString: connStr, ssl: { rejectUnauthorized: false } });
+            connStr = connStr.replace(/&channel_binding=\w+/g, '');
+            pool = new Pool({ connectionString: connStr, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
+            pool.on('error', (err) => { console.error('DB pool error:', err.message); });
             console.log('Connected to PostgreSQL (Neon)');
         } else {
             throw new Error('DATABASE_URL no configurada');
