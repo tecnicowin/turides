@@ -64,6 +64,10 @@ const App = {
         this.setupEventListeners();
         this.setupSocketListeners();
         this.route();
+        const resetBtn = document.getElementById('login-reset-btn');
+        if (resetBtn && this._setupStatus && this._setupStatus.adminSetupComplete) {
+            resetBtn.style.display = 'none';
+        }
     },
 
     async loadFareInfo() {
