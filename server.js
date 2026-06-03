@@ -62,16 +62,13 @@ async function initDB() {
     const pool = getPool();
     const client = await pool.connect();
     try {
-        for (const t of ['withdrawals', 'recharges', 'transactions', 'trips', 'users', 'config']) {
-            await client.query(`DROP TABLE IF EXISTS ${t} CASCADE`);
-        }
-        await client.query(`CREATE TABLE users (
+        await client.query(`CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY, name TEXT, phone TEXT, email TEXT UNIQUE, password TEXT,
             role TEXT, available INTEGER DEFAULT 0, vehicle TEXT, tariffmode TEXT,
             fixedtariffs TEXT, balance REAL DEFAULT 0, bankinfo TEXT, ratings TEXT DEFAULT '[]',
             twofactorsecret TEXT, twofactorenabled INTEGER DEFAULT 0, passwordchanged INTEGER DEFAULT 0
         )`);
-        await client.query(`CREATE TABLE trips (
+        await client.query(`CREATE TABLE IF NOT EXISTS trips (
             id TEXT PRIMARY KEY, clientid TEXT, clientname TEXT, clientphone TEXT,
             originaddress TEXT, destinationaddress TEXT, distance REAL,
             conductorid TEXT, conductorname TEXT, conductorphone TEXT, conductorvehicle TEXT,
@@ -80,18 +77,18 @@ async function initDB() {
             clientratingat TEXT, conductorratingat TEXT, createdat TEXT, completedat TEXT,
             paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal'
         )`);
-        await client.query(`CREATE TABLE transactions (
+        await client.query(`CREATE TABLE IF NOT EXISTS transactions (
             id TEXT PRIMARY KEY, tripid TEXT, clientid TEXT, conductorid TEXT,
             amount REAL, amountbs REAL, method TEXT, status TEXT,
             reference TEXT, phone TEXT, bankcode TEXT, createdat TEXT
         )`);
-        await client.query(`CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)`);
-        await client.query(`CREATE TABLE recharges (
+        await client.query(`CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)`);
+        await client.query(`CREATE TABLE IF NOT EXISTS recharges (
             id TEXT PRIMARY KEY, userid TEXT, username TEXT, amount REAL, amountbs REAL,
             phone TEXT, bankcode TEXT, reference TEXT, status TEXT DEFAULT 'pendiente',
             adminnote TEXT, createdat TEXT, reviewedat TEXT
         )`);
-        await client.query(`CREATE TABLE withdrawals (
+        await client.query(`CREATE TABLE IF NOT EXISTS withdrawals (
             id TEXT PRIMARY KEY, conductorid TEXT, conductorname TEXT,
             amount REAL, amountbs REAL, commission REAL DEFAULT 0, netamount REAL DEFAULT 0,
             bankinfo TEXT, status TEXT DEFAULT 'pendiente', adminnote TEXT,
