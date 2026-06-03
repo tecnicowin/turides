@@ -329,7 +329,7 @@ app.put('/api/users/:id', async (req, res) => {
 app.get('/api/conductors/available', async (req, res) => {
     const distance = parseFloat(req.query.distance) || 10;
     const vehicleType = req.query.vehicleType || 'carro';
-    const rows = await dbAll("SELECT * FROM users WHERE role = 'conductor' AND available = 1");
+    const rows = await dbAll("SELECT * FROM users WHERE role IN ('conductor', 'mensajero') AND available = 1");
     const fareInfo = getFarePeriod();
     const conductors = rows.filter(c => {
         const v = typeof c.vehicle === 'string' ? JSON.parse(c.vehicle || '{}') : (c.vehicle || {});

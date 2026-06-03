@@ -111,12 +111,13 @@ const App = {
     setupSocketListeners() {
         socket.on('connect', () => {
             if (this.session) {
-                socket.emit('join', this.session.role + '_' + this.session.id);
+                const room = (this.session.role === 'conductor' || this.session.role === 'mensajero') ? 'conductor_' + this.session.id : this.session.role + '_' + this.session.id;
+                socket.emit('join', room);
             }
         });
 
         socket.on('trip:new_request', (trip) => {
-            if (this.session && this.session.role === 'conductor' && trip.conductorId === this.session.id) {
+            if (this.session && (this.session.role === 'conductor' || this.session.role === 'mensajero') && trip.conductorId === this.session.id) {
                 this.showToast('Nueva solicitud de viaje recibida!', 'info');
                 this.updateViewContent();
             }
@@ -135,7 +136,7 @@ const App = {
                 this.updateViewContent();
                 this.renderNavbar();
             }
-            if (this.session.role === 'conductor' && trip.conductorId === this.session.id) {
+            if ((this.session.role === 'conductor' || this.session.role === 'mensajero') && trip.conductorId === this.session.id) {
                 this.updateViewContent();
             }
         });
@@ -202,13 +203,15 @@ const App = {
 
         socket.on('connect', () => {
             if (this.session) {
-                socket.emit('join', this.session.role + '_' + this.session.id);
+                const room = (this.session.role === 'conductor' || this.session.role === 'mensajero') ? 'conductor_' + this.session.id : this.session.role + '_' + this.session.id;
+                socket.emit('join', room);
             }
         });
 
         socket.on('reconnect', () => {
             if (this.session) {
-                socket.emit('join', this.session.role + '_' + this.session.id);
+                const room = (this.session.role === 'conductor' || this.session.role === 'mensajero') ? 'conductor_' + this.session.id : this.session.role + '_' + this.session.id;
+                socket.emit('join', room);
                 this.updateViewContent();
             }
         });
@@ -250,8 +253,9 @@ const App = {
                 this.showView('login');
             }
         } else {
-            socket.emit('join', this.session.role + '_' + this.session.id);
-            if (this.session.role === 'conductor') this.startConductorPolling();
+            const room = (this.session.role === 'conductor' || this.session.role === 'mensajero') ? 'conductor_' + this.session.id : this.session.role + '_' + this.session.id;
+            socket.emit('join', room);
+            if (this.session.role === 'conductor' || this.session.role === 'mensajero') this.startConductorPolling();
             else this.stopConductorPolling();
             this.showView(this.session.role);
         }
