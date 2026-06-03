@@ -618,8 +618,13 @@ app.get('/api/transactions', async (req, res) => {
 });
 
 // === BACKUP & RESTORE ===
-app.get('/api/admin/backup', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/backup', async (req, res) => {
     try {
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'No autenticado' });
+        const admin = await dbGet("SELECT role FROM users WHERE id = $1", [userId]);
+        if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+
         const users = (await dbAll('SELECT * FROM users')).map(u => {
             const m = mapRow(u, USER_MAP);
             return { ...m, vehicle: m.vehicle ? JSON.parse(m.vehicle) : null, ratings: m.ratings ? JSON.parse(m.ratings) : [], bankInfo: m.bankInfo ? JSON.parse(m.bankInfo) : null };
@@ -647,8 +652,13 @@ app.get('/api/admin/backup', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
-app.post('/api/admin/restore', requireAuth, requireAdmin, express.json({ limit: '10mb' }), async (req, res) => {
+app.post('/api/admin/restore', express.json({ limit: '10mb' }), async (req, res) => {
     try {
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'No autenticado' });
+        const admin = await dbGet("SELECT role FROM users WHERE id = $1", [userId]);
+        if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+
         const backup = req.body;
         if (!backup || !backup.data) return res.status(400).json({ error: 'Formato de backup inválido' });
 

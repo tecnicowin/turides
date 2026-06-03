@@ -1343,7 +1343,7 @@ ${role === 'admin' ? `
     async adminBackup() {
         try {
             this.showToast('Generando backup...', 'info');
-            const res = await fetch('/api/admin/backup', { headers: { 'Authorization': 'Bearer ' + this.token } });
+            const res = await fetch('/api/admin/backup', { headers: { 'x-user-id': this.session.id } });
             if (!res.ok) throw new Error('Error al crear backup');
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
@@ -1368,7 +1368,7 @@ ${role === 'admin' ? `
             const backup = JSON.parse(text);
             const res = await fetch('/api/admin/restore', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.token },
+                headers: { 'Content-Type': 'application/json', 'x-user-id': this.session.id },
                 body: text
             });
             const result = await res.json();
