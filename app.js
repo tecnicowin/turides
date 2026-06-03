@@ -232,7 +232,7 @@ const App = {
             const prev = this._lastKnownTripStatus;
             try {
                 const trips = await API.get('/api/trips');
-                const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
+        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_movil_pendiente', 'pago_verificado'].includes(t.status));
                 if (activeTrip && activeTrip.status === 'pendiente' && prev[activeTrip.id] !== 'pendiente') {
                     this.showToast('Nueva solicitud de viaje recibida!', 'info');
                     this.updateViewContent();
@@ -634,14 +634,20 @@ ${role === 'admin' ? `
                 const mudanzaForm = document.getElementById('mudanza-order-form');
                 if (mensajeroForm) mensajeroForm.style.display = e.target.value === 'mensajero' ? 'block' : 'none';
                 if (mudanzaForm) mudanzaForm.style.display = e.target.value === 'mudanza' ? 'block' : 'none';
+                const efectivoOption = document.getElementById('efectivo-option');
+                if (efectivoOption) efectivoOption.style.display = e.target.value === 'mudanza' ? 'flex' : 'none';
                 if (e.target.value === 'mensajero') {
                     const pagoMovil = document.querySelector('input[name="payment-method"][value="pago_movil"]');
                     if (pagoMovil) pagoMovil.disabled = true;
+                    const efectivo = document.querySelector('input[name="payment-method"][value="efectivo"]');
+                    if (efectivo) efectivo.disabled = true;
                     const rkm = document.querySelector('input[name="payment-method"][value="rkm"]');
                     if (rkm) { rkm.checked = true; rkm.closest('.payment-method-option')?.classList.add('selected'); }
                 } else {
                     const pagoMovil = document.querySelector('input[name="payment-method"][value="pago_movil"]');
                     if (pagoMovil) pagoMovil.disabled = false;
+                    const efectivo = document.querySelector('input[name="payment-method"][value="efectivo"]');
+                    if (efectivo) efectivo.disabled = false;
                 }
             });
         });
@@ -984,41 +990,46 @@ ${role === 'admin' ? `
         if (activeTrip) {
             radarContainer.style.display = 'none'; activeContainer.style.display = 'block';
             const isRKM = activeTrip.paymentMethod === 'rkm';
-            const paymentLabel = isRKM ? 'Billetera TuRides (Transferencia Interna)' : 'Pago Movil Directo';
-            const paymentColor = isRKM ? 'text-emerald' : 'text-cyan';
-            const paymentIcon = isRKM ? '💰' : '📱';
+            const isEfectivo = activeTrip.paymentMethod === 'efectivo';
+            const isPagoMovil = activeTrip.paymentMethod === 'pago_movil';
+            const isMudanza = activeTrip.orderDetails && (activeTrip.orderDetails.subtype || activeTrip.orderDetails.description);
+            const commission = activeTrip.platformCommission || 0;
+            const driverNet = activeTrip.price - commission;
+            let paymentLabel = isRKM ? 'Billetera TuRides' : isEfectivo ? 'Efectivo (USD)' : 'Pago Movil';
+            let paymentIcon = isRKM ? '💰' : isEfectivo ? '💵' : '📱';
+            let paymentColor = isRKM ? 'text-emerald' : isEfectivo ? 'text-yellow' : 'text-cyan';
+            let paymentDesc = isRKM ? 'Transferencia automatica al completar' : isEfectivo ? 'Pago directo al conductor en efectivo' : 'Transferencia bancaria al admin';
 
-            let html = `<div class="glass-card"><div class="flex justify-between items-center mb-4 border-b border-gray pb-2"><h3 class="text-xl font-bold">Solicitud Entrante</h3><span class="badge ${activeTrip.status === 'aceptado' ? 'text-emerald' : 'text-cyan animate-pulse'}">${activeTrip.status.toUpperCase()}</span></div>
-            <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">Datos del Solicitante:</h4><p class="text-sm"><strong>Cliente:</strong> ${activeTrip.clientName}</p><p class="text-sm"><strong>Celular:</strong> ${activeTrip.clientPhone}</p></div>
-            <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1 flex items-center gap-1">${paymentIcon} Metodo de Pago:</h4><p class="text-sm font-bold ${paymentColor}">${paymentLabel}</p>${isRKM ? '<p class="text-xs text-gray mt-1">El pago se realiza automaticamente por transferencia electronica al completar el viaje.</p>' : '<p class="text-xs text-gray mt-1">El cliente te hara un Pago Movil directo al llegar al destino. Verifica el pago en persona.</p>'}</div>
-            <div class="mb-4"><h4 class="font-bold text-sm mb-1">Detalles de Ruta:</h4><p class="text-sm"><strong>Salida:</strong> ${activeTrip.originAddress}</p><p class="text-sm"><strong>Destino:</strong> ${activeTrip.destinationAddress}</p><p class="text-sm"><strong>Distancia:</strong> ${activeTrip.distance.toFixed(1)} km</p></div>
-            <div class="pricing-card flex justify-between items-center mb-4"><span class="font-bold text-sm">Pago</span><div class="text-right"><span class="text-2xl font-extrabold text-emerald">$${activeTrip.price.toFixed(2)}</span><br><span class="text-xs text-gray">Bs ${this.toBs(activeTrip.price)}</span></div></div>`;
+            let html = `<div class="glass-card"><div class="flex justify-between items-center mb-4 border-b border-gray pb-2"><h3 class="text-xl font-bold">${isMudanza ? 'Solicitud de Mudanza' : 'Solicitud Entrante'}</h3><span class="badge ${activeTrip.status === 'aceptado' ? 'text-emerald' : 'text-cyan animate-pulse'}">${activeTrip.status.toUpperCase()}</span></div>`;
+            if (isMudanza && commission > 0) {
+                html += `<div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">📋 Orden: ${activeTrip.orderDetails?.orderId || activeTrip.id}</h4><p class="text-xs text-cyan font-bold">Subtipo: ${activeTrip.orderDetails?.subtype || 'N/A'}</p><p class="text-xs text-gray">Comision Plataforma: <strong class="text-yellow">${(commission * 100 / activeTrip.price).toFixed(0)}% ($${commission.toFixed(2)})</strong> | Tu recibes: <strong class="text-emerald">$${driverNet.toFixed(2)}</strong></p></div>`;
+            }
+            html += `<div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">Datos del Solicitante:</h4><p class="text-sm"><strong>Cliente:</strong> ${activeTrip.clientName}</p><p class="text-sm"><strong>Celular:</strong> ${activeTrip.clientPhone}</p></div>`;
+            html += `<div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1 flex items-center gap-1">${paymentIcon} Metodo de Pago:</h4><p class="text-sm font-bold ${paymentColor}">${paymentLabel}</p><p class="text-xs text-gray mt-1">${paymentDesc}</p></div>`;
+            html += `<div class="mb-4"><h4 class="font-bold text-sm mb-1">Detalles de Ruta:</h4><p class="text-sm"><strong>Salida:</strong> ${activeTrip.originAddress}</p><p class="text-sm"><strong>Destino:</strong> ${activeTrip.destinationAddress}</p><p class="text-sm"><strong>Distancia:</strong> ${activeTrip.distance.toFixed(1)} km</p></div>`;
+            html += `<div class="pricing-card flex justify-between items-center mb-4"><span class="font-bold text-sm">Pago Total</span><div class="text-right"><span class="text-2xl font-extrabold text-emerald">$${activeTrip.price.toFixed(2)}</span><br><span class="text-xs text-gray">Bs ${this.toBs(activeTrip.price)}</span></div></div>`;
 
             if (activeTrip.status === 'pendiente') {
                 html += `<div class="flex gap-2"><button onclick="App.acceptTripByConductor('${activeTrip.id}')" class="btn btn-emerald flex-1">Aceptar Servicio</button><button onclick="App.rejectTripByConductor('${activeTrip.id}')" class="btn btn-red flex-1">Rechazar</button></div>`;
             } else if (activeTrip.status === 'aceptado') {
-                if (!isRKM) {
-                    const driverBank = this.session.bankInfo || {};
-                    const hasBank = driverBank.bank && driverBank.account;
-                    html += `<div class="p-3 bg-dark rounded border-l-purple mb-3"><p class="text-xs text-emerald font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p>`;
-                    if (hasBank) {
-                        html += `<div class="p-2 bg-gray rounded mt-2"><p class="text-xs text-cyan font-bold">Comparte estos datos al cliente para el Pago Movil:</p><p class="text-sm"><strong>Banco:</strong> ${driverBank.bank}</p><p class="text-sm"><strong>Cuenta:</strong> ${driverBank.account}</p><p class="text-sm"><strong>Telefono:</strong> ${driverBank.phone || this.session.phone}</p><p class="text-sm"><strong>Titular:</strong> ${driverBank.name || this.session.name}</p></div>`;
-                    } else {
-                        html += `<p class="text-xs text-red mt-2">⚠️ No tienes cuenta bancaria configurada. Configurala en tu billetera para recibir pagos.</p>`;
-                    }
-                    html += `</div>`;
-                } else {
+                if (isRKM) {
                     html += `<div class="p-3 bg-dark rounded border-l-purple text-center"><p class="text-xs text-emerald font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p><p class="text-xs text-gray">El pago se transferira automaticamente al completar.</p></div>`;
+                } else if (isEfectivo) {
+                    html += `<div class="p-3 bg-dark rounded border-l-yellow mb-3"><p class="text-xs text-yellow font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p><p class="text-xs text-gray">Cobra $${activeTrip.price.toFixed(2)} en efectivo al llegar al destino.</p><p class="text-xs text-gray mt-1">La comision de $${commission.toFixed(2)} se descontara de tu billetera.</p></div>`;
+                } else {
+                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-3"><p class="text-xs text-cyan font-bold mb-2">Has aceptado este servicio. Contacta al ${activeTrip.clientPhone}.</p><p class="text-xs text-gray">El cliente transferira $${activeTrip.price.toFixed(2)} a la cuenta de la plataforma.</p><p class="text-xs text-gray mt-1">Espera verificacion del admin para recibir tu pago.</p></div>`;
                 }
                 html += `<button onclick="App.completeTripByConductor('${activeTrip.id}')" class="btn btn-purple w-full mt-3">Completar Viaje</button>`;
             } else if (activeTrip.status === 'completado') {
                 if (isRKM) {
-                    html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago procesado automaticamente via Billetera TuRides.</p><p class="text-sm text-gray">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p><p class="text-xs text-gray mt-1">El saldo fue transferido del cliente a tu billetera.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+                    html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago procesado automaticamente via Billetera.</p><p class="text-sm text-gray">Recibido: <strong class="text-emerald">$${driverNet.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(driverNet)})</span></p><p class="text-xs text-gray mt-1">Comision: $${commission.toFixed(2)} | Total: $${activeTrip.price.toFixed(2)}</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+                } else if (isEfectivo) {
+                    html += `<div class="p-3 bg-dark rounded border-l-yellow mb-4 text-center"><p class="text-xs text-yellow font-bold mb-2">💵 Pago en efectivo pendiente.</p><p class="text-sm text-gray">Cobra $${activeTrip.price.toFixed(2)} del cliente en efectivo.</p><p class="text-xs text-gray mt-1">Comision: -$${commission.toFixed(2)} de tu billetera.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Recibido ✓</button>`;
                 } else {
-                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">⏳ Esperando que el cliente realice el Pago Movil.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p><p class="text-xs text-gray">Verifica el pago en persona con el cliente antes de continuar.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">⏳ Esperando verificacion del admin.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p><p class="text-xs text-gray">El admin verificara el pago movil del cliente.</p></div>`;
                 }
             } else if (activeTrip.status === 'pago_verificado') {
-                html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">Pago verificado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
+                html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago verificado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
             }
             html += `</div>`;
             activeContainer.innerHTML = html;
@@ -1511,12 +1522,30 @@ ${role === 'admin' ? `
                     const cl = users.find(u => u.id === t.clientId);
                     const co = users.find(u => u.id === t.conductorId);
                     const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-';
-                    const statusColors = { pendiente: 'text-yellow', aceptado: 'text-purple', completado: 'text-emerald', pago_verificado: 'text-cyan', calificado: 'text-emerald', rechazado: 'text-red' };
+                    const statusColors = { pendiente: 'text-yellow', aceptado: 'text-purple', completado: 'text-emerald', pago_verificado: 'text-cyan', calificado: 'text-emerald', rechazado: 'text-red', pago_movil_pendiente: 'text-yellow' };
                     const sc = statusColors[t.status] || 'text-gray';
-                    tripHtml += `<tr><td class="text-xs">${date}</td><td><strong>${cl?.name || t.clientName || 'N/A'}</strong></td><td><strong>${co?.name || t.conductorName || 'N/A'}</strong></td><td><span class="text-xs">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)}</td><td><span class="badge ${t.paymentMethod === 'rkm' ? 'text-emerald' : 'text-cyan'}">${t.paymentMethod === 'rkm' ? 'RKM' : 'P.Movil'}</span></td><td class="${sc} font-bold text-xs">${t.status.toUpperCase()}</td></tr>`;
+                    tripHtml += `<tr><td class="text-xs">${date}</td><td><strong>${cl?.name || t.clientName || 'N/A'}</strong></td><td><strong>${co?.name || t.conductorName || 'N/A'}</strong></td><td><span class="text-xs">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)}</td><td><span class="badge ${t.paymentMethod === 'rkm' ? 'text-emerald' : t.paymentMethod === 'efectivo' ? 'text-yellow' : 'text-cyan'}">${t.paymentMethod === 'rkm' ? 'RKM' : t.paymentMethod === 'efectivo' ? 'Efectivo' : 'P.Movil'}</span></td><td class="${sc} font-bold text-xs">${t.status.toUpperCase()}</td></tr>`;
                 });
                 tripHtml += '</tbody></table>';
                 tripsList.innerHTML = tripHtml;
+            }
+        }
+
+        const pendingPagos = document.getElementById('admin-pending-pagos');
+        const pendingPM = trips.filter(t => t.status === 'pago_movil_pendiente');
+        const pendingPMBadge = document.getElementById('admin-pending-pm');
+        if (pendingPMBadge) pendingPMBadge.textContent = pendingPM.length;
+        if (pendingPagos) {
+            if (pendingPM.length === 0) {
+                pendingPagos.innerHTML = `<p class="text-center text-gray p-4">No hay pagos movil pendientes de verificacion.</p>`;
+            } else {
+                let pmHtml = '<table class="table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Conductor</th><th>Ruta</th><th>Monto</th><th>Accion</th></tr></thead><tbody>';
+                pendingPM.forEach(t => {
+                    const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-';
+                    pmHtml += `<tr><td class="text-xs">${date}</td><td><strong>${t.clientName || 'N/A'}</strong></td><td><strong>${t.conductorName || 'N/A'}</strong></td><td><span class="text-xs">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)}</td><td><button onclick="App.adminVerifyPagoMovil('${t.id}')" class="btn btn-emerald btn-sm">Verificar Pago ✓</button></td></tr>`;
+                });
+                pmHtml += '</tbody></table>';
+                pendingPagos.innerHTML = pmHtml;
             }
         }
 
@@ -1524,6 +1553,17 @@ ${role === 'admin' ? `
 
         try { this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
         try { this.renderAdminBackup(); } catch(e) { console.error('Backup panel error:', e); }
+    },
+
+    async adminVerifyPagoMovil(tripId) {
+        if (!confirm('Confirmar que el pago movil fue recibido correctamente?')) return;
+        try {
+            await API.put(`/api/admin/verify-pago-movil/${tripId}`);
+            this.showToast('Pago verificado. Saldo del conductor actualizado.', 'success');
+            this.renderAdminDashboard();
+        } catch(e) {
+            this.showToast('Error verificando pago.', 'error');
+        }
     },
 
     renderAdminSupport(recharges, withdrawals) {

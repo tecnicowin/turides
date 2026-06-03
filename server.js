@@ -44,7 +44,7 @@ const TRIP_MAP = {
     clientratingat: 'clientRatingAt', conductorratingat: 'conductorRatingAt',
     createdat: 'createdAt', completedat: 'completedAt',
     paymentverifiedat: 'paymentVerifiedAt', faremultiplier: 'fareMultiplier',
-    fareperiod: 'farePeriod', orderdetails: 'orderDetails'
+    fareperiod: 'farePeriod', orderdetails: 'orderDetails', platformcommission: 'platformCommission'
 };
 const TXN_MAP = { tripid: 'tripId', clientid: 'clientId', conductorid: 'conductorId', amountbs: 'amountBs', bankcode: 'bankCode', createdat: 'createdAt' };
 const RECHARGE_MAP = { userid: 'userId', username: 'userName', amountbs: 'amountBs', bankcode: 'bankCode', adminnote: 'adminNote', createdat: 'createdAt', reviewedat: 'reviewedAt' };
@@ -76,7 +76,7 @@ async function initDB() {
             paymentstatus TEXT, clientrating INTEGER, conductorrating INTEGER,
             clientratingat TEXT, conductorratingat TEXT, createdat TEXT, completedat TEXT,
             paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal',
-            orderdetails TEXT
+            orderdetails TEXT, platformcommission REAL DEFAULT 0
         )`);
         await client.query(`CREATE TABLE IF NOT EXISTS transactions (
             id TEXT PRIMARY KEY, tripid TEXT, clientid TEXT, conductorid TEXT,
@@ -173,6 +173,12 @@ const KILOMETER_RATE = {
     mudanza_pickup: { base: 50, perKm: 0, flatRate: true },
     mudanza_350: { base: 100, perKm: 0, flatRate: true },
     mudanza_750: { base: 180, perKm: 0, flatRate: true }
+};
+
+const MUDANZA_COMMISSION = {
+    mudanza_pickup: 0.05,
+    mudanza_350: 0.10,
+    mudanza_750: 0.15
 };
 
 // === AUTH ===
@@ -383,8 +389,12 @@ app.post('/api/trips', async (req, res) => {
     if (orderDetails && vehicle.type === 'mensajero') {
         orderDetailsJson = JSON.stringify({ ...orderDetails, orderId: 'MENS-' + Date.now().toString().slice(-8) });
     }
-    await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod, orderdetails) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)',
-        [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period, orderDetailsJson]);
+    let platformCommission = 0;
+    if (orderDetails && orderDetails.subtype && MUDANZA_COMMISSION[orderDetails.subtype]) {
+        platformCommission = parseFloat((finalPrice * MUDANZA_COMMISSION[orderDetails.subtype]).toFixed(2));
+    }
+    await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod, orderdetails, platformcommission) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)',
+        [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period, orderDetailsJson, platformCommission]);
     const trip = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [id]));
     io.emit('trip:created', trip);
     io.to('conductor_' + conductorId).emit('trip:new_request', trip);
@@ -397,34 +407,78 @@ app.put('/api/trips/:id/status', async (req, res) => {
     const { status } = req.body;
     const now = new Date().toISOString();
     if (status === 'completado') {
+        const isMudanza = trip.orderdetails && (trip.paymentmethod === 'rkm' || trip.paymentmethod === 'efectivo' || trip.paymentmethod === 'pago_movil');
         if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
             const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
             if (!client || client.balance < trip.price) {
                 return res.status(400).json({ error: 'Saldo insuficiente del cliente para pago RKM' });
             }
+            const commission = trip.platformcommission || 0;
+            const driverNet = parseFloat((trip.price - commission).toFixed(2));
             const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
             await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
             const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
             if (conductor) {
-                const newCondBal = parseFloat((conductor.balance + trip.price).toFixed(2));
+                const newCondBal = parseFloat((conductor.balance + driverNet).toFixed(2));
                 await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
             }
             const rate = await getBCVRate();
             const amountBs = parseFloat((trip.price * rate).toFixed(2));
             await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
                 ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, trip.price, amountBs, 'rkm', 'completado', now]);
+            if (commission > 0) {
+                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                    ['TXN_COM_' + Date.now(), req.params.id, null, trip.conductorid, commission, parseFloat((commission * rate).toFixed(2)), 'platform_commission', 'descontado', now]);
+            }
             await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pagado', req.params.id]);
             const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));
             const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
             io.to('client_' + trip.clientid).emit('user:updated', updatedClient);
             io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
             io.emit('payment:completed', { tripId: req.params.id, method: 'rkm' });
+        } else if (trip.paymentmethod === 'efectivo') {
+            const commission = trip.platformcommission || 0;
+            if (commission > 0) {
+                const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+                if (conductor) {
+                    const newCondBal = parseFloat((conductor.balance - commission).toFixed(2));
+                    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
+                }
+                const rate = await getBCVRate();
+                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                    ['TXN_COM_' + Date.now(), req.params.id, null, trip.conductorid, commission, parseFloat((commission * rate).toFixed(2)), 'platform_commission', 'descontado', now]);
+            }
+            await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pagado', req.params.id]);
+            const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
+            io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
+        } else if (trip.paymentmethod === 'pago_movil') {
+            await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', ['pago_movil_pendiente', now, req.params.id]);
+            io.emit('trip:status_changed', parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id])));
         } else {
             await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', [status, now, req.params.id]);
         }
     } else if (status === 'pago_verificado') {
-        await dbRun('UPDATE trips SET status = $1, paymentstatus = $2, paymentverifiedat = $3 WHERE id = $4', [status, 'pagado', now, req.params.id]);
+        const isMudanzaPagoMovil = trip.paymentmethod === 'pago_movil' && trip.orderdetails;
+        if (isMudanzaPagoMovil) {
+            const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+            if (conductor) {
+                const newCondBal = parseFloat((conductor.balance + trip.price).toFixed(2));
+                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
+            }
+            await dbRun('UPDATE trips SET status = $1, paymentstatus = $2, paymentverifiedat = $3 WHERE id = $4', ['completado', 'pagado', now, req.params.id]);
+            const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
+            io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
+        } else {
+            await dbRun('UPDATE trips SET status = $1, paymentstatus = $2, paymentverifiedat = $3 WHERE id = $4', [status, 'pagado', now, req.params.id]);
+        }
     } else if (status === 'aceptado') {
+        if (trip.paymentmethod === 'efectivo' || trip.paymentmethod === 'rkm') {
+            const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+            const commission = parseFloat((trip.price * (MUDANZA_COMMISSION[trip.orderdetails?.subtype] || 0.05)).toFixed(2));
+            if (conductor && conductor.balance < commission) {
+                return res.status(400).json({ error: `Saldo insuficiente. Necesitas $${commission.toFixed(2)} para la comision de Plataforma.` });
+            }
+        }
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
         await dbRun('UPDATE users SET available = 0 WHERE id = $1', [trip.conductorid]);
     } else if (status === 'calificado') {
@@ -635,6 +689,28 @@ app.put('/api/wallet/withdrawals/:id', async (req, res) => {
 app.get('/api/transactions', async (req, res) => {
     const rows = await dbAll('SELECT * FROM transactions ORDER BY createdat DESC');
     res.json(rows.map(r => mapRow(r, TXN_MAP)));
+});
+
+// === ADMIN PAGO MOVIL MUDANZA VERIFICATION ===
+app.put('/api/admin/verify-pago-movil/:tripId', async (req, res) => {
+    const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.tripId]);
+    if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+    if (trip.paymentmethod !== 'pago_movil' || trip.status !== 'pago_movil_pendiente') {
+        return res.status(400).json({ error: 'Este viaje no esta pendiente de verificacion' });
+    }
+    const now = new Date().toISOString();
+    const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+    if (conductor) {
+        const newCondBal = parseFloat((conductor.balance + trip.price).toFixed(2));
+        await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
+    }
+    await dbRun('UPDATE trips SET status = $1, paymentstatus = $2, paymentverifiedat = $3 WHERE id = $4', ['completado', 'pagado', now, req.params.tripId]);
+    const updatedTrip = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.tripId]));
+    const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
+    io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
+    io.to('client_' + trip.clientid).emit('trip:status_changed', updatedTrip);
+    io.to('conductor_' + trip.conductorid).emit('trip:status_changed', updatedTrip);
+    res.json(updatedTrip);
 });
 
 // === BACKUP & RESTORE ===
