@@ -182,6 +182,8 @@ const MUDANZA_COMMISSION = {
     mudanza_750: 0.15
 };
 
+const PLATFORM_COMMISSION_RATE = 0.10;
+
 // === AUTH ===
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
@@ -393,6 +395,8 @@ app.post('/api/trips', async (req, res) => {
     let platformCommission = 0;
     if (orderDetails && orderDetails.subtype && MUDANZA_COMMISSION[orderDetails.subtype]) {
         platformCommission = parseFloat((finalPrice * MUDANZA_COMMISSION[orderDetails.subtype]).toFixed(2));
+    } else {
+        platformCommission = parseFloat((finalPrice * PLATFORM_COMMISSION_RATE).toFixed(2));
     }
     await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod, orderdetails, platformcommission) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)',
         [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period, orderDetailsJson, platformCommission]);
@@ -475,7 +479,9 @@ app.put('/api/trips/:id/status', async (req, res) => {
     } else if (status === 'aceptado') {
         if (trip.paymentmethod === 'efectivo' || trip.paymentmethod === 'rkm') {
             const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
-            const commission = parseFloat((trip.price * (MUDANZA_COMMISSION[trip.orderdetails?.subtype] || 0.05)).toFixed(2));
+            const isMudanza = trip.orderdetails && trip.orderdetails.subtype && MUDANZA_COMMISSION[trip.orderdetails.subtype];
+            const commissionRate = isMudanza ? MUDANZA_COMMISSION[trip.orderdetails.subtype] : PLATFORM_COMMISSION_RATE;
+            const commission = parseFloat((trip.price * commissionRate).toFixed(2));
             if (conductor && conductor.balance < commission) {
                 return res.status(400).json({ error: `Saldo insuficiente. Necesitas $${commission.toFixed(2)} para la comision de Plataforma.` });
             }

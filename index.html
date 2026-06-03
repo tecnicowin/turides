@@ -461,10 +461,12 @@
 
                 <div class="grid-col-history">
                     <div class="glass-card mb-4">
-                        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                            <span>📋</span> Mis Solicitudes Contratadas
+                        <h2 class="text-xl font-bold mb-4 flex items-center gap-2" style="cursor:pointer" onclick="App.toggleAdminSection('cliente-history-wrapper')">
+                            <span id="cliente-history-wrapper-toggle">▲</span> 📋 Mis Solicitudes Contratadas
                         </h2>
-                        <div id="cliente-history" class="table-container"></div>
+                        <div id="cliente-history-wrapper">
+                            <div id="cliente-history" class="table-container"></div>
+                        </div>
                     </div>
                     <div class="glass-card">
                         <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
@@ -552,8 +554,16 @@
                     <p id="admin-stat-volume" class="text-2xl font-extrabold text-cyan">$0.00</p>
                 </div>
                 <div class="glass-card stat-card text-center">
-                    <p class="text-gray text-xs uppercase font-bold">Liquidacion 15%</p>
-                    <p id="admin-stat-platform" class="text-2xl font-extrabold text-pink">$0.00</p>
+                    <p class="text-gray text-xs uppercase font-bold">Comision Viajes</p>
+                    <p id="admin-stat-commission-trips" class="text-2xl font-extrabold text-pink">$0.00</p>
+                </div>
+                <div class="glass-card stat-card text-center">
+                    <p class="text-gray text-xs uppercase font-bold">Comision Retiros</p>
+                    <p id="admin-stat-commission-withdrawals" class="text-2xl font-extrabold text-yellow">$0.00</p>
+                </div>
+                <div class="glass-card stat-card text-center">
+                    <p class="text-gray text-xs uppercase font-bold">Total Liquidacion</p>
+                    <p id="admin-stat-platform" class="text-2xl font-extrabold text-emerald">$0.00</p>
                 </div>
             </div>
 
@@ -750,15 +760,51 @@
                 <h2>Recargar Billetera TuRides</h2>
             </div>
             <div class="recharge-form">
+                <div id="rkm-recharge-bank-info" class="pm-account-info mb-3"></div>
                 <div class="form-group">
                     <label>Monto a recargar ($)</label>
                     <input type="number" id="recharge-amount" min="1" step="0.01" placeholder="Ej. 50.00" class="input">
                 </div>
-                <p class="recharge-info">El monto se acreditará tras aprobacion del administrador.</p>
+                <div class="form-group">
+                    <label>Tu telefono</label>
+                    <input type="tel" id="recharge-phone" placeholder="0412-0000000" class="input">
+                </div>
+                <div class="form-group">
+                    <label>Banco de origen</label>
+                    <select id="recharge-bank" class="input">
+                        <option value="">Seleccionar banco</option>
+                        <option value="0102">Banco de Venezuela</option>
+                        <option value="0104">Banco Provincial</option>
+                        <option value="0105">Banco Mercantil</option>
+                        <option value="0108">Banco BBVA</option>
+                        <option value="0114">Banco Bancaribe</option>
+                        <option value="0116">Banco Plaza</option>
+                        <option value="0128">Banco Occidental</option>
+                        <option value="0134">Banco Venezolano</option>
+                        <option value="0151">Banco BFC</option>
+                        <option value="0156">100% Banco</option>
+                        <option value="0157">Banco Del Tesoro</option>
+                        <option value="0163">Banco Guerra</option>
+                        <option value="0168">Bancrecer</option>
+                        <option value="0169">Mi Banco</option>
+                        <option value="0171">Banco del Pueblo</option>
+                        <option value="0172">Bancamiga</option>
+                        <option value="0173">Banco Internacional</option>
+                        <option value="0174">Banplus</option>
+                        <option value="0175">Bicentenario</option>
+                        <option value="0177">Banco Facilito</option>
+                        <option value="0185">Fondo Comun</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Referencia (6 digitos)</label>
+                    <input type="text" id="recharge-ref" placeholder="Ej. 123456" maxlength="6" class="input">
+                </div>
+                <p class="recharge-info text-xs text-gray">Realiza un Pago Movil a la cuenta de TuRides y envia la solicitud. El monto se acreditara tras aprobacion del administrador.</p>
             </div>
             <div class="payment-actions">
                 <button onclick="App.closeRKMRechargeModal()" class="btn btn-outline w-full">Cancelar</button>
-                <button onclick="App.processRKMRecharge()" class="btn btn-emerald w-full">Recargar</button>
+                <button onclick="App.processRKMRecharge()" class="btn btn-emerald w-full">Enviar Solicitud</button>
             </div>
         </div>
     </div>

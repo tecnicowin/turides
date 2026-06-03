@@ -216,6 +216,21 @@ const App = {
             }
         });
 
+        socket.on('recharge:created', (data) => {
+            if (!this.session) return;
+            if (this.session.role === 'admin') {
+                this.showToast(`📥 Nueva solicitud de recarga de $${data.amount.toFixed(2)} por ${data.userName}`, 'warning');
+                this.renderAdminDashboard();
+            }
+        });
+
+        socket.on('recharge:updated', (data) => {
+            if (!this.session) return;
+            if (this.session.role === 'admin') {
+                this.renderAdminDashboard();
+            }
+        });
+
         socket.on('reconnect', () => {
             if (this.session) {
                 const room = (this.session.role === 'conductor' || this.session.role === 'mensajero') ? 'conductor_' + this.session.id : this.session.role + '_' + this.session.id;
@@ -475,8 +490,8 @@ ${role === 'admin' ? `
 <ul>
     <li><strong>Recargas:</strong> Aprobar o rechazar solicitudes de recarga</li>
     <li><strong>Retiros:</strong> Aprobar, rechazar o marcar como realizado con referencia bancaria</li>
-    <li><strong>Comision por retiro:</strong> Configurable (default 10%)</li>
-    <li><strong>Liquidacion:</strong> Vista de ingresos totales de la plataforma (15% de volumen total)</li>
+    <li><strong>Comision por retiro:</strong> Configurable (default 10%) - Gastos de Plataforma</li>
+    <li><strong>Liquidacion:</strong> Muestra Comision Viajes + Comision Retiros = Total Liquidacion</li>
 </ul>
 <h4>Configuracion</h4>
 <ul>
@@ -745,14 +760,24 @@ ${role === 'admin' ? `
         if (closedTrips.length === 0) {
             historyContainer.innerHTML = `<p class="text-center text-gray p-4">No has realizado solicitudes anteriores.</p>`;
         } else {
+            const defaultCount = 5;
+            const initial = closedTrips.slice(0, defaultCount);
+            const hidden = closedTrips.slice(defaultCount);
             let thtml = '<table class="table"><thead><tr><th>Conductor</th><th>Ruta</th><th>Precio</th><th>Pago</th><th>Calificacion</th><th>Estado</th></tr></thead><tbody>';
-            closedTrips.forEach(t => {
+            const renderHistoryRow = (t) => {
                 const sc = t.status === 'calificado' ? 'text-purple' : t.status === 'completado' ? 'text-emerald' : 'text-red';
                 const pl = t.paymentMethod === 'rkm' ? 'RKM' : 'P.Movil';
                 const rHtml = t.conductorRating ? this.renderStarsSmall(t.conductorRating, 1) : '<span class="text-xs text-gray">Pendiente</span>';
-                thtml += `<tr><td><strong>${t.conductorName}</strong><br><span class="text-xs text-gray">${t.conductorVehicle}</span></td><td><span class="text-xs font-bold">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)} <span class="text-xs text-gray">Bs ${this.toBs(t.price)}</span></td><td><span class="badge text-cyan">${pl}</span></td><td>${rHtml}</td><td class="${sc} font-bold">${t.status.toUpperCase()}</td></tr>`;
-            });
+                return `<tr><td><strong>${t.conductorName}</strong><br><span class="text-xs text-gray">${t.conductorVehicle}</span></td><td><span class="text-xs font-bold">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)} <span class="text-xs text-gray">Bs ${this.toBs(t.price)}</span></td><td><span class="badge text-cyan">${pl}</span></td><td>${rHtml}</td><td class="${sc} font-bold">${t.status.toUpperCase()}</td></tr>`;
+            };
+            initial.forEach(t => { thtml += renderHistoryRow(t); });
             thtml += '</tbody></table>';
+            if (hidden.length > 0) {
+                thtml += `<div id="cliente-history-extra" style="display:none"><table class="table"><tbody>`;
+                hidden.forEach(t => { thtml += renderHistoryRow(t); });
+                thtml += '</tbody></table></div>';
+                thtml += `<div class="text-center mt-2"><button onclick="App.toggleAdminSection('cliente-history-extra')" class="btn btn-sm btn-purple" id="cliente-history-extra-toggle">▼ Mostrar ${hidden.length} solicitudes mas</button></div>`;
+            }
             historyContainer.innerHTML = thtml;
         }
 
@@ -934,19 +959,36 @@ ${role === 'admin' ? `
     },
 
     closePaymentModal() { document.getElementById('payment-modal').classList.add('hidden'); },
-    openRKMRechargeModal() { document.getElementById('rkm-recharge-modal').classList.remove('hidden'); },
+    async openRKMRechargeModal() {
+        document.getElementById('rkm-recharge-modal').classList.remove('hidden');
+        try {
+            const config = await API.get('/api/config');
+            const infoEl = document.getElementById('rkm-recharge-bank-info');
+            if (infoEl && config.bankName) {
+                infoEl.innerHTML = `<div class="pm-info-row"><span>Banco:</span><strong>${config.bankName}</strong></div><div class="pm-info-row"><span>Cuenta:</span><strong>${config.accountNumber}</strong></div><div class="pm-info-row"><span>Titular:</span><strong>${config.holderName}</strong></div><div class="pm-info-row"><span>RIF/Cedula:</span><strong>${config.documentType}-${config.documentNumber}</strong></div><div class="pm-info-row"><span>Tasa BCV:</span><strong class="text-cyan">${this._bcvRate || '-'} Bs/$</strong></div>`;
+            }
+            const phoneEl = document.getElementById('recharge-phone');
+            if (phoneEl && this.session.phone) phoneEl.value = this.session.phone;
+        } catch(e) { console.error('Error loading config:', e); }
+    },
     closeRKMRechargeModal() { document.getElementById('rkm-recharge-modal').classList.add('hidden'); },
 
     async processRKMRecharge() {
         const amount = parseFloat(document.getElementById('recharge-amount').value);
+        const phone = document.getElementById('recharge-phone').value.trim();
+        const bankCode = document.getElementById('recharge-bank').value;
+        const reference = document.getElementById('recharge-ref').value.trim();
         if (isNaN(amount) || amount <= 0) { this.showToast('Ingresa un monto valido.', 'error'); return; }
-        await API.post('/api/rkm/recharge', { userId: this.session.id, amount });
-        this.session = await API.get(`/api/users/${this.session.id}`);
-        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        if (!phone || phone.length < 10) { this.showToast('Telefono invalido.', 'error'); return; }
+        if (!bankCode) { this.showToast('Selecciona un banco.', 'error'); return; }
+        if (!reference || reference.length < 6) { this.showToast('Referencia invalida (min 6 digitos).', 'error'); return; }
+        const result = await API.post('/api/wallet/recharge', { userId: this.session.id, amount, phone, bankCode, reference });
+        if (result.error) { this.showToast(result.error, 'error'); return; }
         this.closeRKMRechargeModal();
-        this.showToast(`Billetera RKM recargada con $${amount.toFixed(2)}.`, 'success');
-        this.updateViewContent();
-        this.renderNavbar();
+        this.showToast(result.message || 'Solicitud de recarga enviada. Espera aprobacion del admin.', 'success');
+        document.getElementById('recharge-amount').value = '';
+        document.getElementById('recharge-bank').value = '';
+        document.getElementById('recharge-ref').value = '';
     },
 
     stopPendingTimer() {
@@ -1476,6 +1518,15 @@ ${role === 'admin' ? `
         this.updateViewContent();
     },
 
+    toggleAdminSection(sectionId) {
+        const el = document.getElementById(sectionId);
+        if (!el) return;
+        const isHidden = el.style.display === 'none';
+        el.style.display = isHidden ? '' : 'none';
+        const btn = document.getElementById(sectionId + '-toggle');
+        if (btn) btn.textContent = isHidden ? '▲' : '▼';
+    },
+
     async renderAdminDashboard() {
         let trips = [], users = [], transactions = [], config = {}, recharges = [], withdrawals = [];
         try {
@@ -1487,13 +1538,19 @@ ${role === 'admin' ? `
         } catch(e) { this.showToast('Error cargando datos admin.', 'error'); return; }
         const completed = trips.filter(t => ['completado', 'calificado'].includes(t.status));
         const volume = completed.reduce((acc, t) => acc + t.price, 0);
+        const commissionTrips = completed.reduce((acc, t) => acc + (t.platformCommission || 0), 0);
+        const realizedWithdrawals = withdrawals.filter(w => w.status === 'realizado');
+        const commissionWithdrawals = realizedWithdrawals.reduce((acc, w) => acc + (w.commission || 0), 0);
+        const totalLiquidation = commissionTrips + commissionWithdrawals;
         const pendingRecharges = recharges.filter(r => r.status === 'pendiente').length;
         const pendingWithdrawals = withdrawals.filter(w => w.status === 'pendiente').length;
 
         document.getElementById('admin-stat-trips').textContent = trips.length;
         document.getElementById('admin-stat-completed').textContent = completed.length;
         document.getElementById('admin-stat-volume').innerHTML = `$${volume.toFixed(2)}<br><span class="text-xs text-gray">Bs ${this.toBs(volume)}</span>`;
-        document.getElementById('admin-stat-platform').innerHTML = `$${(volume * 0.15).toFixed(2)}<br><span class="text-xs text-gray">Bs ${this.toBs(volume * 0.15)}</span>`;
+        document.getElementById('admin-stat-commission-trips').innerHTML = `$${commissionTrips.toFixed(2)}<br><span class="text-xs text-gray">Bs ${this.toBs(commissionTrips)}</span>`;
+        document.getElementById('admin-stat-commission-withdrawals').innerHTML = `$${commissionWithdrawals.toFixed(2)}<br><span class="text-xs text-gray">Bs ${this.toBs(commissionWithdrawals)}</span>`;
+        document.getElementById('admin-stat-platform').innerHTML = `$${totalLiquidation.toFixed(2)}<br><span class="text-xs text-gray">Bs ${this.toBs(totalLiquidation)}</span>`;
 
         const pendingBadge = document.getElementById('admin-stat-pending');
         if (pendingBadge) pendingBadge.textContent = pendingRecharges + pendingWithdrawals;
@@ -1534,8 +1591,12 @@ ${role === 'admin' ? `
             if (trips.length === 0) {
                 tripsList.innerHTML = `<p class="text-center text-gray p-4">No hay viajes registrados.</p>`;
             } else {
+                const defaultCount = 5;
+                const sorted = [...trips].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                const initial = sorted.slice(0, defaultCount);
+                const hidden = sorted.slice(defaultCount);
                 let tripHtml = '<table class="table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Conductor</th><th>Ruta</th><th>Precio</th><th>Pago</th><th>Estado</th></tr></thead><tbody>';
-                trips.slice(0, 50).forEach(t => {
+                initial.forEach(t => {
                     const cl = users.find(u => u.id === t.clientId);
                     const co = users.find(u => u.id === t.conductorId);
                     const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-';
@@ -1544,6 +1605,19 @@ ${role === 'admin' ? `
                     tripHtml += `<tr><td class="text-xs">${date}</td><td><strong>${cl?.name || t.clientName || 'N/A'}</strong></td><td><strong>${co?.name || t.conductorName || 'N/A'}</strong></td><td><span class="text-xs">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)}</td><td><span class="badge ${t.paymentMethod === 'rkm' ? 'text-emerald' : t.paymentMethod === 'efectivo' ? 'text-yellow' : 'text-cyan'}">${t.paymentMethod === 'rkm' ? 'RKM' : t.paymentMethod === 'efectivo' ? 'Efectivo' : 'P.Movil'}</span></td><td class="${sc} font-bold text-xs">${t.status.toUpperCase()}</td></tr>`;
                 });
                 tripHtml += '</tbody></table>';
+                if (hidden.length > 0) {
+                    tripHtml += `<div id="admin-trips-extra" style="display:none"><table class="table"><tbody>`;
+                    hidden.forEach(t => {
+                        const cl = users.find(u => u.id === t.clientId);
+                        const co = users.find(u => u.id === t.conductorId);
+                        const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-';
+                        const statusColors = { pendiente: 'text-yellow', aceptado: 'text-purple', completado: 'text-emerald', pago_verificado: 'text-cyan', calificado: 'text-emerald', rechazado: 'text-red', pago_movil_pendiente: 'text-yellow' };
+                        const sc = statusColors[t.status] || 'text-gray';
+                        tripHtml += `<tr><td class="text-xs">${date}</td><td><strong>${cl?.name || t.clientName || 'N/A'}</strong></td><td><strong>${co?.name || t.conductorName || 'N/A'}</strong></td><td><span class="text-xs">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)}</td><td><span class="badge ${t.paymentMethod === 'rkm' ? 'text-emerald' : t.paymentMethod === 'efectivo' ? 'text-yellow' : 'text-cyan'}">${t.paymentMethod === 'rkm' ? 'RKM' : t.paymentMethod === 'efectivo' ? 'Efectivo' : 'P.Movil'}</span></td><td class="${sc} font-bold text-xs">${t.status.toUpperCase()}</td></tr>`;
+                    });
+                    tripHtml += '</tbody></table></div>';
+                    tripHtml += `<div class="text-center mt-2"><button id="admin-trips-toggle" onclick="App.toggleAdminSection('admin-trips-extra')" class="btn btn-sm btn-purple">▼ Mostrar ${hidden.length} viajes mas</button></div>`;
+                }
                 tripsList.innerHTML = tripHtml;
             }
         }
@@ -1654,14 +1728,19 @@ ${role === 'admin' ? `
 
         let html = '';
 
-        html += `<div class="mb-6"><h3 class="text-lg font-bold mb-3 text-cyan">📥 Recargas de Clientes (${recharges.length})</h3>`;
+        html += `<div class="mb-6"><h3 class="text-lg font-bold mb-3 text-cyan" style="cursor:pointer" onclick="App.toggleAdminSection('admin-recharges-body')"><span id="admin-recharges-body-toggle">▲</span> 📥 Recargas de Clientes (${recharges.length})</h3>`;
+        html += `<div id="admin-recharges-body">`;
         if (recharges.length === 0) {
             html += `<p class="text-center text-gray p-4">No hay solicitudes de recarga.</p>`;
         } else {
+            const defaultCount = 5;
+            const sorted = [...recharges].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const initial = sorted.slice(0, defaultCount);
+            const hidden = sorted.slice(defaultCount);
             html += '<table class="table"><thead><tr><th>ID</th><th>Cliente</th><th>Monto</th><th>Banco</th><th>Ref</th><th>Estado</th><th>Accion</th></tr></thead><tbody>';
-            recharges.forEach(r => {
+            const renderRechargeRow = (r) => {
                 const statusColor = r.status === 'aprobada' ? 'text-emerald' : r.status === 'rechazada' ? 'text-red' : 'text-cyan';
-                html += `<tr>
+                return `<tr>
                     <td class="text-xs font-mono">${r.id.slice(-8)}</td>
                     <td><strong>${r.userName}</strong></td>
                     <td class="font-bold text-emerald">$${r.amount.toFixed(2)} <span class="text-xs">Bs ${this.toBs(r.amount)}</span></td>
@@ -1670,24 +1749,35 @@ ${role === 'admin' ? `
                     <td><span class="badge ${statusColor}">${r.status.toUpperCase()}</span></td>
                     <td>${r.status === 'pendiente' ? `<div class="flex gap-1"><button onclick="App.adminReviewRecharge('${r.id}', 'aprobada')" class="btn btn-emerald btn-sm">✓</button><button onclick="App.adminReviewRecharge('${r.id}', 'rechazada')" class="btn btn-red btn-sm">✗</button></div>` : '<span class="text-xs text-gray">' + (r.adminNote || 'Revisado') + '</span>'}</td>
                 </tr>`;
-            });
+            };
+            initial.forEach(r => { html += renderRechargeRow(r); });
             html += '</tbody></table>';
+            if (hidden.length > 0) {
+                html += `<div id="admin-recharges-extra" style="display:none"><table class="table"><tbody>`;
+                hidden.forEach(r => { html += renderRechargeRow(r); });
+                html += '</tbody></table></div>';
+                html += `<div class="text-center mt-2"><button id="admin-recharges-extra-toggle" onclick="App.toggleAdminSection('admin-recharges-extra')" class="btn btn-sm btn-purple">▼ Mostrar ${hidden.length} recargas mas</button></div>`;
+            }
         }
-        html += `</div>`;
+        html += `</div></div>`;
 
-        html += `<div><h3 class="text-lg font-bold mb-3 text-purple">📤 Retiros de Conductores (${withdrawals.length})</h3>`;
+        html += `<div><h3 class="text-lg font-bold mb-3 text-purple" style="cursor:pointer" onclick="App.toggleAdminSection('admin-withdrawals-body')"><span id="admin-withdrawals-body-toggle">▲</span> 📤 Retiros de Conductores (${withdrawals.length})</h3>`;
+        html += `<div id="admin-withdrawals-body">`;
         if (withdrawals.length === 0) {
             html += `<p class="text-center text-gray p-4">No hay solicitudes de retiro.</p>`;
         } else {
-            withdrawals.forEach(w => {
+            const defaultCount = 5;
+            const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+            const sorted = [...withdrawals].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const initial = sorted.slice(0, defaultCount);
+            const hidden = sorted.slice(defaultCount);
+            const renderWithdrawalCard = (w) => {
                 const statusColor = w.status === 'aprobada' ? 'text-emerald' : w.status === 'rechazada' ? 'text-red' : w.status === 'realizado' ? 'text-purple' : 'text-cyan';
                 const bInfo = JSON.parse(w.bankInfo || '{}');
-                const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
                 const bankName = bankNames[bInfo.bank] || bInfo.bank || '-';
                 const commission = w.commission || 0;
                 const netAmount = w.netAmount || (w.amount - commission);
-
-                html += `<div class="glass-card mb-3 p-4 border-l-purple">
+                return `<div class="glass-card mb-3 p-4 border-l-purple">
                     <div class="flex justify-between items-start mb-2">
                         <div>
                             <h4 class="font-bold text-purple">${w.conductorName}</h4>
@@ -1716,9 +1806,16 @@ ${role === 'admin' ? `
                     ${w.status === 'realizado' ? `<div class="mt-2 p-2 bg-emerald rounded text-xs"><p class="font-bold text-emerald">✅ Transferencia realizada</p><p>Ref: <strong>${w.reference || '-'}</strong></p><div class="mt-2"><a href="/api/wallet/withdrawals/${w.id}/ticket" target="_blank" class="btn btn-purple btn-sm" style="font-size:10px;padding:4px 8px;">📄 Ver Ticket PDF</a></div></div>` : ''}
                     ${w.status === 'rechazada' ? `<div class="mt-2 text-xs text-gray">${w.adminNote ? `<strong>Motivo:</strong> ${w.adminNote}` : 'Rechazado'}</div>` : ''}
                 </div>`;
-            });
+            };
+            initial.forEach(w => { html += renderWithdrawalCard(w); });
+            if (hidden.length > 0) {
+                html += `<div id="admin-withdrawals-extra" style="display:none">`;
+                hidden.forEach(w => { html += renderWithdrawalCard(w); });
+                html += `</div>`;
+                html += `<div class="text-center mt-2"><button id="admin-withdrawals-extra-toggle" onclick="App.toggleAdminSection('admin-withdrawals-extra')" class="btn btn-sm btn-purple">▼ Mostrar ${hidden.length} retiros mas</button></div>`;
+            }
         }
-        html += `</div>`;
+        html += `</div></div>`;
 
         container.innerHTML = html;
     },
@@ -1922,19 +2019,31 @@ ${role === 'admin' ? `
                 <button onclick="App.submitRecharge()" class="btn btn-emerald w-full">Enviar Solicitud de Recarga</button>
             </div>
             <div class="glass-card">
-                <h3 class="text-lg font-bold mb-3">📋 Mis Recargas</h3>`;
+                <h3 class="text-lg font-bold mb-3" style="cursor:pointer" onclick="App.toggleAdminSection('client-recharges-body')"><span id="client-recharges-body-toggle">▲</span> 📋 Mis Recargas</h3>
+                <div id="client-recharges-body">`;
         if (myRecharges.length === 0) {
             html += `<p class="text-center text-gray p-4">No tienes recargas registradas.</p>`;
         } else {
+            const defaultCount = 5;
+            const sorted = [...myRecharges].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const initial = sorted.slice(0, defaultCount);
+            const hidden = sorted.slice(defaultCount);
             html += '<table class="table"><thead><tr><th>Monto</th><th>Ref</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>';
-            myRecharges.forEach(r => {
+            const renderRechargeRow = (r) => {
                 const sc = r.status === 'aprobada' ? 'text-emerald' : r.status === 'rechazada' ? 'text-red' : 'text-cyan';
                 const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-';
-                html += `<tr><td class="font-bold text-emerald">$${r.amount.toFixed(2)} <span class="text-xs">Bs ${this.toBs(r.amount)}</span></td><td class="text-xs font-mono">${r.reference || '-'}</td><td><span class="badge ${sc}">${r.status.toUpperCase()}</span></td><td class="text-xs">${date}</td></tr>`;
-            });
+                return `<tr><td class="font-bold text-emerald">$${r.amount.toFixed(2)} <span class="text-xs">Bs ${this.toBs(r.amount)}</span></td><td class="text-xs font-mono">${r.reference || '-'}</td><td><span class="badge ${sc}">${r.status.toUpperCase()}</span></td><td class="text-xs">${date}</td></tr>`;
+            };
+            initial.forEach(r => { html += renderRechargeRow(r); });
             html += '</tbody></table>';
+            if (hidden.length > 0) {
+                html += `<div id="client-recharges-extra" style="display:none"><table class="table"><tbody>`;
+                hidden.forEach(r => { html += renderRechargeRow(r); });
+                html += '</tbody></table></div>';
+                html += `<div class="text-center mt-2"><button onclick="App.toggleAdminSection('client-recharges-extra')" class="btn btn-sm btn-purple" id="client-recharges-extra-toggle">▼ Mostrar ${hidden.length} recargas mas</button></div>`;
+            }
         }
-        html += `</div>`;
+        html += `</div></div>`;
 
         html += `
             <div class="glass-card mt-4">
