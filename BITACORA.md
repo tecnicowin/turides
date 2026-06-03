@@ -1,6 +1,6 @@
 # Bitácora de Desarrollo - TuRides
 
-## Última sesión: 03/Junio/2026 11:00 PM
+## Última sesión: 03/Junio/2026 11:30 PM
 
 ---
 
@@ -20,6 +20,7 @@
 - `23d10a3` — Add backup reminder + Google Drive auto-upload
 - `83ebea9` — Add Walking Courier (Mensajero) service with digital orders
 - `c1cffdd` — Add Mudanza service (Pick-Up, 350, 750) with sub-type selection
+- `2a7ccef` — Restructure registration: 3 roles + vehicle sub-types (Carro/Moto/Camion)
 
 ### Servicio Walking Courier (Mensajero)
 - **Tipo de vehículo:** `mensajero` (🚶)
@@ -38,6 +39,19 @@
 - **Tarifa:** Flat rate (sin cargo por km)
 - **Orden digital:** Incluye sub-tipo, descripción, datos del solicitante
 - **Flujo:** Cliente selecciona "Carga/Mudanza" → Elige sub-tipo → Contrata → Conductor acepta → Muestra orden
+
+### Restructuración de Registro
+- **3 roles:** Cliente (sin vehículo), Mensajero (sin vehículo), Conductor (con vehículo)
+- **Conductor sub-tipo de vehículo:**
+  - 🚗 Carro: Pasajeros + Maletas
+  - 🏍️ Moto: Viajes / Delivery / Ambas
+  - 🚚 Camión: Capacidad (1 ton, 3.5 ton, 7 ton) + Viajes al Interior (Si/No)
+- **Clasificación automática:**
+  - Camión 1 ton → Camioneta
+  - Camión 3.5 ton → Mudanza 350
+  - Camión 7 ton → Mudanza 750
+  - Moto Ambas → moto_ambas (acepta viajes y delivery)
+- **Archivos:** `index.html` (radio buttons 3 roles + sub-tipos), `app.js` (event handlers + data collection), `server.js` (conductor filtering)
 
 ### Sistema de Backup/Restauración
 - **Endpoint GET `/api/admin/backup`**: Exporta todos los datos (users, trips, transactions, config, recharges, withdrawals) como archivo JSON descargable
