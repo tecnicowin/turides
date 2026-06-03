@@ -161,6 +161,14 @@ const App = {
             this.updateViewContent();
         });
 
+        socket.on('withdrawal:created', (data) => {
+            if (!this.session) return;
+            if (this.session.role === 'admin') {
+                this.showToast(`📤 Nuevo retiro de $${data.amount.toFixed(2)} solicitado por ${data.conductorName}`, 'warning');
+                this.renderAdminDashboard();
+            }
+        });
+
         socket.on('withdrawal:rejected', (data) => {
             if (!this.session) return;
             this.showToast(`❌ Retiro rechazado: $${data.amount.toFixed(2)}. ${data.reason || ''}`, 'error');
