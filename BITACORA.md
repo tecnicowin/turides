@@ -1,6 +1,6 @@
 # Bitácora de Desarrollo - TuRides
 
-## Última sesión: 03/Junio/2026 10:30 PM
+## Última sesión: 03/Junio/2026 11:00 PM
 
 ---
 
@@ -19,6 +19,7 @@
 - `c09198e` — FIX: backup/restore auth - use x-user-id header instead of undefined middleware
 - `23d10a3` — Add backup reminder + Google Drive auto-upload
 - `83ebea9` — Add Walking Courier (Mensajero) service with digital orders
+- `c1cffdd` — Add Mudanza service (Pick-Up, 350, 750) with sub-type selection
 
 ### Servicio Walking Courier (Mensajero)
 - **Tipo de vehículo:** `mensajero` (🚶)
@@ -27,6 +28,16 @@
 - **Orden digital:** Se genera `MENS-[ID]` con datos del remitente, destinatario, tipo de servicio y descripción
 - **Flujo:** Cliente llena formulario de envío → Conductor acepta → Muestra orden al retirar paquete
 - **Archivos:** `server.js` (rate + orderdetails), `app.js` (UI + form), `index.html` (radio + form)
+
+### Servicio Carga/Mudanza
+- **Tipo de vehículo:** `mudanza` (🚚)
+- **Sub-tipo:** Seleccionable desde dropdown
+  - Pick-Up (1 ton): $50 flat
+  - Camión 350 (3.5 ton): $100 flat
+  - Camión 750 (7 ton): $180 flat
+- **Tarifa:** Flat rate (sin cargo por km)
+- **Orden digital:** Incluye sub-tipo, descripción, datos del solicitante
+- **Flujo:** Cliente selecciona "Carga/Mudanza" → Elige sub-tipo → Contrata → Conductor acepta → Muestra orden
 
 ### Sistema de Backup/Restauración
 - **Endpoint GET `/api/admin/backup`**: Exporta todos los datos (users, trips, transactions, config, recharges, withdrawals) como archivo JSON descargable
