@@ -169,7 +169,7 @@ const KILOMETER_RATE = {
     camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 },
     moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 },
     moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 },
-    mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 },
+    mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.3, maxDistance: 3.0 },
     mudanza_pickup: { base: 50, perKm: 0, flatRate: true },
     mudanza_350: { base: 100, perKm: 0, flatRate: true },
     mudanza_750: { base: 180, perKm: 0, flatRate: true }

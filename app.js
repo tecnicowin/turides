@@ -1,6 +1,6 @@
 const socket = io();
 
-const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 }, mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 }, mudanza: { flatRate: true }, mudanza_pickup: { base: 50, perKm: 0, flatRate: true }, mudanza_350: { base: 100, perKm: 0, flatRate: true }, mudanza_750: { base: 180, perKm: 0, flatRate: true } };
+const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 },     mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.3, maxDistance: 3.0 }, mudanza: { flatRate: true }, mudanza_pickup: { base: 50, perKm: 0, flatRate: true }, mudanza_350: { base: 100, perKm: 0, flatRate: true }, mudanza_750: { base: 180, perKm: 0, flatRate: true } };
 
 const API = {
     async get(url) { const r = await fetch(url); return r.json(); },
@@ -762,11 +762,18 @@ ${role === 'admin' ? `
         if (distBadge) { distBadge.innerHTML = `Calculando distancia...`; distBadge.style.display = 'block'; }
         listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-cyan font-bold">Buscando ruta...</p></div>`;
         let simulatedKm = await this.calculateDistance(origin, dest);
-        if (!simulatedKm || simulatedKm <= 0) {
-            simulatedKm = 5.0;
-            if (distBadge) distBadge.innerHTML = `Distancia estimada: <strong class="text-yellow">${simulatedKm.toFixed(1)} km</strong> <span class="text-xs text-gray">(no se pudo geolocalizar, estimado)</span>`;
+        const geocodingFailed = !simulatedKm || simulatedKm <= 0;
+        if (geocodingFailed) {
+            if (vehicleType === 'mensajero') {
+                simulatedKm = 1.0;
+            } else if (vehicleType === 'mudanza') {
+                simulatedKm = 5.0;
+            } else {
+                simulatedKm = 5.0;
+            }
+            if (distBadge) { distBadge.innerHTML = `Distancia estimada: <strong class="text-yellow">${simulatedKm.toFixed(1)} km</strong> <span class="text-xs text-gray">(no se pudo geolocalizar, estimado)</span>`; }
         } else {
-            if (distBadge) distBadge.innerHTML = `Distancia calculada: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`;
+            if (distBadge) { distBadge.innerHTML = `Distancia calculada: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`; }
         }
         this.calculatedDistance = simulatedKm;
         if (distBadge) { distBadge.innerHTML = `Kilometros calculados: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`; distBadge.style.display = 'block'; }
