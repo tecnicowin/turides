@@ -1367,13 +1367,30 @@ ${role === 'admin' ? `
                 <p class="text-xs text-gray mb-2">Bs ${this.toBs(this.session.balance)} | Total ganado: $${totalEarned.toFixed(2)}</p>
                 ${this.session.balance > 0 ? `<button onclick="App.openMensajeroWithdrawalModal()" class="btn btn-purple w-full">Solicitar Retiro</button>` : '<p class="text-xs text-center text-gray">No hay saldo para retirar.</p>'}
             </div>
-            ${pendingW.length > 0 ? `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-cyan">⏳ Retiros Pendientes</h3>${pendingW.map(w => `<div class="p-3 bg-gray rounded mb-2"><p class="text-sm"><strong>$${w.amount.toFixed(2)}</strong> → $${w.netAmount.toFixed(2)} (comision: $${w.commission.toFixed(2)})</p><p class="text-xs text-gray">Solicitado: ${w.createdAt ? new Date(w.createdAt).toLocaleDateString() : '-'}</p></div>`).join('')}</div>` : ''}
+            ${pendingW.length > 0 ? `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-cyan">⏳ Retiros Pendientes</h3>${pendingW.map(w => `<div class="p-3 bg-gray rounded mb-2"><p class="text-sm"><strong>$${w.amount.toFixed(2)}</strong> → $${(w.netAmount || w.amount).toFixed(2)} (comision: $${(w.commission || 0).toFixed(2)})</p><p class="text-xs text-gray">Solicitado: ${w.createdAt ? new Date(w.createdAt).toLocaleDateString() : '-'}</p></div>`).join('')}</div>` : ''}
+            ${approvedW.length > 0 ? (() => {
+                const showCount = this._mensajeroWithdrawalsShowAll ? approvedW.length : 3;
+                const hiddenCount = approvedW.length - showCount;
+                let ahtml = `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-emerald">✅ Retiros Realizados (${approvedW.length})</h3>`;
+                approvedW.slice(0, showCount).forEach(w => {
+                    const date = w.reviewedAt ? new Date(w.reviewedAt).toLocaleDateString() : '-';
+                    const net = w.netAmount || (w.amount - (w.commission || 0));
+                    ahtml += `<div class="p-3 bg-gray rounded mb-2"><div class="flex justify-between items-center"><span class="font-bold text-emerald">$${net.toFixed(2)} transferidos</span><span class="badge text-emerald">${w.status.toUpperCase()}</span></div><p class="text-xs text-gray mt-1">Ref: <strong class="text-cyan">${w.reference || 'Sin referencia'}</strong> | ${date}</p>`;
+                    if (w.status === 'realizado') ahtml += `<div class="mt-2"><a href="/api/wallet/withdrawals/${w.id}/ticket" target="_blank" class="btn btn-purple btn-sm" style="font-size:10px;padding:4px 8px;">📄 Ver Ticket PDF</a></div>`;
+                    ahtml += `</div>`;
+                });
+                if (hiddenCount > 0 || (showCount < approvedW.length && !this._mensajeroWithdrawalsShowAll)) {
+                    ahtml += `<button onclick="App._mensajeroWithdrawalsShowAll = !App._mensajeroWithdrawalsShowAll; App.renderMensajeroWallet();" class="btn btn-sm w-full mt-2" style="background:rgba(255,255,255,0.1);color:#999;font-size:11px;">${this._mensajeroWithdrawalsShowAll ? '⬆️ Mostrar menos' : `⬇️ Mostrar ${hiddenCount} mas`}</button>`;
+                }
+                ahtml += `</div>`;
+                return ahtml;
+            })() : ''}
             <div class="glass-card mb-4">
                 <h3 class="text-lg font-bold mb-3">🏦 Cuenta Bancaria para Retiros</h3>
-                ${hasBank ? `<div class="p-3 bg-gray rounded"><p class="text-sm"><strong>Banco:</strong> ${bankInfo.bank}</p><p class="text-sm"><strong>Cuenta:</strong> ${bankInfo.account}</p><p class="text-sm"><strong>Telefono:</strong> ${bankInfo.phone}</p><p class="text-sm"><strong>Titular:</strong> ${bankInfo.name}</p></div>` : '<p class="text-xs text-red mb-2">No tienes cuenta bancaria configurada.</p>'}
+                ${hasBank ? `<div class="p-3 bg-gray rounded"><p class="text-sm"><strong>Banco:</strong> ${bankInfo.bank}</p><p class="text-sm"><strong>Cuenta:</strong> ${bankInfo.account}</p><p class="text-sm"><strong>Telefono:</strong> ${bankInfo.phone || '-'}</p><p class="text-sm"><strong>Titular:</strong> ${bankInfo.name || '-'}</p></div>` : '<p class="text-xs text-red mb-2">No tienes cuenta bancaria configurada.</p>'}
                 <div class="mt-3">
                     <div class="form-group mb-2">
-                        <select id="mensajero-wbank" class="input"><option value="">Selecciona banco</option>${banks.map(b => `<option value="${b.name}" ${bankInfo.bank === b.name ? 'selected' : ''}>${b.name}</option>`).join('')}</select>
+                        <select id="mensajero-wbank" class="input"><option value="">Selecciona banco</option>${banks.map(b => `<option value="${b.code}" ${bankInfo.bank === b.code ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('')}</select>
                     </div>
                     <div class="grid grid-2 gap-2 mb-2">
                         <input type="text" id="mensajero-waccount" class="input" placeholder="Nro. Cuenta" value="${bankInfo.account || ''}">
