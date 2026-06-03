@@ -1320,16 +1320,37 @@ ${role === 'admin' ? `
         container.innerHTML = html;
     },
 
-    renderAdminBackup() {
+    async renderAdminBackup() {
         const container = document.getElementById('admin-backup-panel');
         if (!container) return;
+        let reminderHtml = '';
+        try {
+            const status = await API.get('/api/admin/backup/status');
+            if (status.needsBackup) {
+                const msg = status.daysSince === null ? 'Nunca has creado un backup.' : `Ultimo backup hace ${status.daysSince} dias.`;
+                reminderHtml = `<div class="glass-card p-4 mb-4" style="border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.1);">
+                    <div class="flex items-center gap-3">
+                        <span style="font-size: 2rem;">⚠️</span>
+                        <div>
+                            <p class="font-bold text-sm" style="color: #f59e0b;">RECORDATORIO DE BACKUP</p>
+                            <p class="text-xs">${msg} Te recomiendo descargar uno ahora.</p>
+                        </div>
+                    </div>
+                </div>`;
+            }
+        } catch(e) {}
         container.innerHTML = `
+            ${reminderHtml}
             <div class="mb-4">
-                <h3 class="text-lg font-bold mb-3 text-cyan">💾 Backup y Restauración</h3>
-                <div class="grid grid-2 gap-2">
+                <h3 class="text-lg font-bold mb-3 text-cyan">💾 Backup y Restauracion</h3>
+                <div class="grid grid-3 gap-2">
                     <div class="glass-card p-4 text-center">
-                        <p class="text-sm mb-3">Exportar todos los datos (usuarios, viajes, transacciones, config) como archivo JSON.</p>
+                        <p class="text-sm mb-3">Exportar todos los datos como archivo JSON a tu computadora.</p>
                         <button onclick="App.adminBackup()" class="btn btn-purple w-full">📦 Descargar Backup</button>
+                    </div>
+                    <div class="glass-card p-4 text-center">
+                        <p class="text-sm mb-3">Subir backup automaticamente a Google Drive.</p>
+                        <button onclick="App.adminBackupGoogleDrive()" class="btn btn-emerald w-full">☁️ Subir a Google Drive</button>
                     </div>
                     <div class="glass-card p-4 text-center">
                         <p class="text-sm mb-3">Restaurar datos desde un archivo JSON de backup anterior.</p>
@@ -1352,7 +1373,25 @@ ${role === 'admin' ? `
             a.download = `turides-backup-${new Date().toISOString().slice(0,10)}.json`;
             a.click();
             URL.revokeObjectURL(url);
+            await fetch('/api/admin/backup/track', { method: 'POST', headers: { 'x-user-id': this.session.id } });
             this.showToast('Backup descargado exitosamente.', 'success');
+            this.renderAdminBackup();
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    async adminBackupGoogleDrive() {
+        try {
+            this.showToast('Subiendo backup a Google Drive...', 'info');
+            const res = await fetch('/api/admin/backup/google-drive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-user-id': this.session.id }
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Error al subir');
+            this.showToast(`Backup subido a Google Drive: ${result.fileName}`, 'success');
+            this.renderAdminBackup();
         } catch (e) {
             this.showToast('Error: ' + e.message, 'error');
         }

@@ -618,6 +618,80 @@ app.get('/api/transactions', async (req, res) => {
 });
 
 // === BACKUP & RESTORE ===
+app.get('/api/admin/backup/status', async (req, res) => {
+    try {
+        const row = await dbGet("SELECT value FROM config WHERE key = 'lastBackupAt'");
+        const lastBackup = row ? row.value : null;
+        const daysSince = lastBackup ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000) : null;
+        res.json({ lastBackup, daysSince, needsBackup: daysSince === null || daysSince >= 7 });
+    } catch (err) {
+        res.json({ lastBackup: null, daysSince: null, needsBackup: true });
+    }
+});
+
+app.post('/api/admin/backup/track', async (req, res) => {
+    try {
+        await dbRun("INSERT INTO config (key, value) VALUES ('lastBackupAt', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [new Date().toISOString()]);
+        res.json({ ok: true });
+    } catch (err) {
+        res.json({ ok: false });
+    }
+});
+
+app.post('/api/admin/backup/google-drive', async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ error: 'No autenticado' });
+        const admin = await dbGet("SELECT role FROM users WHERE id = $1", [userId]);
+        if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+
+        const credsJson = process.env.GOOGLE_DRIVE_CREDENTIALS;
+        if (!credsJson) return res.status(400).json({ error: 'Google Drive no configurado. Agrega GOOGLE_DRIVE_CREDENTIALS en las variables de entorno de Render.' });
+
+        const { google } = require('googleapis');
+        const creds = JSON.parse(credsJson);
+        const auth = new google.auth.GoogleAuth({
+            credentials: creds,
+            scopes: ['https://www.googleapis.com/auth/drive.file']
+        });
+        const drive = google.drive({ version: 'v3', auth });
+
+        const users = (await dbAll('SELECT * FROM users')).map(u => {
+            const m = mapRow(u, USER_MAP);
+            return { ...m, vehicle: m.vehicle ? JSON.parse(m.vehicle) : null, ratings: m.ratings ? JSON.parse(m.ratings) : [], bankInfo: m.bankInfo ? JSON.parse(m.bankInfo) : null };
+        });
+        const trips = (await dbAll('SELECT * FROM trips')).map(t => mapRow(t, TRIP_MAP));
+        const transactions = (await dbAll('SELECT * FROM transactions')).map(tx => mapRow(tx, TXN_MAP));
+        const config = (await dbAll('SELECT * FROM config'));
+        const configObj = {};
+        config.forEach(c => { configObj[c.key] = c.value; });
+        const recharges = (await dbAll('SELECT * FROM recharges')).map(r => mapRow(r, RECHARGE_MAP));
+        const withdrawals = (await dbAll('SELECT * FROM withdrawals')).map(w => mapRow(w, WITHDRAWAL_MAP));
+
+        const backup = {
+            version: '1.0',
+            createdAt: new Date().toISOString(),
+            data: { users, trips, transactions, config: configObj, recharges, withdrawals }
+        };
+
+        const fileName = `turides-backup-${new Date().toISOString().slice(0,10)}.json`;
+        const fileMetadata = { name: fileName, mimeType: 'application/json' };
+        const media = { mimeType: 'application/json', body: JSON.stringify(backup, null, 2) };
+
+        const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID || null;
+        if (folderId) fileMetadata.parents = [folderId];
+
+        const file = await drive.files.create({ resource: fileMetadata, media, fields: 'id, name' });
+
+        await dbRun("INSERT INTO config (key, value) VALUES ('lastBackupAt', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [new Date().toISOString()]);
+
+        res.json({ ok: true, fileId: file.data.id, fileName: file.data.name });
+    } catch (err) {
+        console.error('Google Drive backup error:', err);
+        res.status(500).json({ error: 'Error al subir a Google Drive: ' + err.message });
+    }
+});
+
 app.get('/api/admin/backup', async (req, res) => {
     try {
         const userId = req.headers['x-user-id'];
