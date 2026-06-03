@@ -961,7 +961,7 @@ ${role === 'admin' ? `
         const hasBank = bankInfo.bank && bankInfo.account;
 
         const trips = await API.get('/api/trips');
-        const myCompleted = trips.filter(t => t.conductorId === this.session.id && ['completado', 'pago_verificado', 'calificado'].includes(t.status) && t.paymentstatus === 'pagado');
+        const myCompleted = trips.filter(t => t.conductorId === this.session.id && ['completado', 'pago_verificado', 'calificado'].includes(t.status) && t.paymentStatus === 'pagado');
         const totalEarned = myCompleted.reduce((acc, t) => acc + t.price, 0);
 
         const banks = [
@@ -1213,6 +1213,25 @@ ${role === 'admin' ? `
                 });
                 txnHtml += '</tbody></table>';
                 txnTable.innerHTML = txnHtml;
+            }
+        }
+
+        const tripsList = document.getElementById('admin-trips-list');
+        if (tripsList) {
+            if (trips.length === 0) {
+                tripsList.innerHTML = `<p class="text-center text-gray p-4">No hay viajes registrados.</p>`;
+            } else {
+                let tripHtml = '<table class="table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Conductor</th><th>Ruta</th><th>Precio</th><th>Pago</th><th>Estado</th></tr></thead><tbody>';
+                trips.slice(0, 50).forEach(t => {
+                    const cl = users.find(u => u.id === t.clientId);
+                    const co = users.find(u => u.id === t.conductorId);
+                    const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-';
+                    const statusColors = { pendiente: 'text-yellow', aceptado: 'text-purple', completado: 'text-emerald', pago_verificado: 'text-cyan', calificado: 'text-emerald', rechazado: 'text-red' };
+                    const sc = statusColors[t.status] || 'text-gray';
+                    tripHtml += `<tr><td class="text-xs">${date}</td><td><strong>${cl?.name || t.clientName || 'N/A'}</strong></td><td><strong>${co?.name || t.conductorName || 'N/A'}</strong></td><td><span class="text-xs">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)}</td><td><span class="badge ${t.paymentMethod === 'rkm' ? 'text-emerald' : 'text-cyan'}">${t.paymentMethod === 'rkm' ? 'RKM' : 'P.Movil'}</span></td><td class="${sc} font-bold text-xs">${t.status.toUpperCase()}</td></tr>`;
+                });
+                tripHtml += '</tbody></table>';
+                tripsList.innerHTML = tripHtml;
             }
         }
 

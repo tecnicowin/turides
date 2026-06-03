@@ -378,28 +378,30 @@ app.put('/api/trips/:id/status', async (req, res) => {
     const { status } = req.body;
     const now = new Date().toISOString();
     if (status === 'completado') {
-        await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', [status, now, req.params.id]);
         if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
             const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
-            if (client && client.balance >= trip.price) {
-                const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
-                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
-                const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
-                if (conductor) {
-                    const newCondBal = parseFloat((conductor.balance + trip.price).toFixed(2));
-                    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
-                }
-                const rate = await getBCVRate();
-                const amountBs = parseFloat((trip.price * rate).toFixed(2));
-                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                    ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, trip.price, amountBs, 'rkm', 'completado', now]);
-                await dbRun('UPDATE trips SET paymentstatus = $1 WHERE id = $2', ['pagado', req.params.id]);
-                const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));
-                const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
-                io.to('client_' + trip.clientid).emit('user:updated', updatedClient);
-                io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
-                io.emit('payment:completed', { tripId: req.params.id, method: 'rkm' });
+            if (!client || client.balance < trip.price) {
+                return res.status(400).json({ error: 'Saldo insuficiente del cliente para pago RKM' });
             }
+            const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
+            await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
+            const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+            if (conductor) {
+                const newCondBal = parseFloat((conductor.balance + trip.price).toFixed(2));
+                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
+            }
+            const rate = await getBCVRate();
+            const amountBs = parseFloat((trip.price * rate).toFixed(2));
+            await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, trip.price, amountBs, 'rkm', 'completado', now]);
+            await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pagado', req.params.id]);
+            const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));
+            const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
+            io.to('client_' + trip.clientid).emit('user:updated', updatedClient);
+            io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
+            io.emit('payment:completed', { tripId: req.params.id, method: 'rkm' });
+        } else {
+            await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', [status, now, req.params.id]);
         }
     } else if (status === 'pago_verificado') {
         await dbRun('UPDATE trips SET status = $1, paymentverifiedat = $2 WHERE id = $3', [status, now, req.params.id]);
