@@ -1,6 +1,28 @@
 # Bitácora de Desarrollo - TuRides
 
-## Última sesión: 02/Junio/2026 11:30 PM - 03/Junio/2026 12:30 AM
+## Última sesión: 03/Junio/2026 10:00 PM
+
+---
+
+## ✅ Completado esta sesión
+
+### FIX CRÍTICO: Pérdida de datos en cada deploy
+**Problema:** `initDB()` ejecutaba `DROP TABLE IF EXISTS` en todas las tablas cada vez que el servidor arrancaba. En Render, esto ocurría en cada deploy, sleep/wake, o restart.
+
+**Solución:** Eliminado el loop `DROP TABLE` y cambiado `CREATE TABLE` a `CREATE TABLE IF NOT EXISTS`. Ahora las tablas se crean solo si no existen, y los datos persisten entre deploys.
+
+**Archivo:** `server.js:60-113` — función `initDB()`
+
+**Commits:**
+- `9cee818` — FIX: Remove DROP TABLE from initDB - data now persists across deploys
+- `c2ca899` — Add admin backup/restore system (JSON export/import)
+
+### Sistema de Backup/Restauración
+- **Endpoint GET `/api/admin/backup`**: Exporta todos los datos (users, trips, transactions, config, recharges, withdrawals) como archivo JSON descargable
+- **Endpoint POST `/api/admin/restore`**: Importa datos desde un archivo JSON con upsert (ON CONFLICT DO UPDATE/DO NOTHING)
+- **UI Admin**: Botones "Descargar Backup" y "Restaurar Backup" en el panel de administración
+- **Confirmación de seguridad**: Restauración requiere confirmación del admin antes de ejecutar
+- **Transacción SQL**: Restore usa BEGIN/COMMIT/ROLLBACK para garantizar integridad
 
 ---
 
