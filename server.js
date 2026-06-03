@@ -44,7 +44,7 @@ const TRIP_MAP = {
     clientratingat: 'clientRatingAt', conductorratingat: 'conductorRatingAt',
     createdat: 'createdAt', completedat: 'completedAt',
     paymentverifiedat: 'paymentVerifiedAt', faremultiplier: 'fareMultiplier',
-    fareperiod: 'farePeriod'
+    fareperiod: 'farePeriod', orderdetails: 'orderDetails'
 };
 const TXN_MAP = { tripid: 'tripId', clientid: 'clientId', conductorid: 'conductorId', amountbs: 'amountBs', bankcode: 'bankCode', createdat: 'createdAt' };
 const RECHARGE_MAP = { userid: 'userId', username: 'userName', amountbs: 'amountBs', bankcode: 'bankCode', adminnote: 'adminNote', createdat: 'createdAt', reviewedat: 'reviewedAt' };
@@ -75,7 +75,8 @@ async function initDB() {
             price REAL, pricebs REAL, paymentmethod TEXT, status TEXT DEFAULT 'pendiente',
             paymentstatus TEXT, clientrating INTEGER, conductorrating INTEGER,
             clientratingat TEXT, conductorratingat TEXT, createdat TEXT, completedat TEXT,
-            paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal'
+            paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal',
+            orderdetails TEXT
         )`);
         await client.query(`CREATE TABLE IF NOT EXISTS transactions (
             id TEXT PRIMARY KEY, tripid TEXT, clientid TEXT, conductorid TEXT,
@@ -130,6 +131,9 @@ function parseTrip(row) {
     m.conductorRating = m.conductorRating || null;
     m.fareMultiplier = m.fareMultiplier || 1.0;
     m.farePeriod = m.farePeriod || 'normal';
+    if (m.orderDetails && typeof m.orderDetails === 'string') {
+        try { m.orderDetails = JSON.parse(m.orderDetails); } catch(e) { m.orderDetails = null; }
+    }
     return m;
 }
 
@@ -164,7 +168,8 @@ const KILOMETER_RATE = {
     carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 },
     camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 },
     moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 },
-    moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 }
+    moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 },
+    mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 }
 };
 
 // === AUTH ===
@@ -336,13 +341,14 @@ app.get('/api/conductors/available', async (req, res) => {
         if (c.tariffmode === 'fijo') {
             price = parseFloat(fixedTariffs.defaultPrice) || 35.00;
         } else {
+            if (rates.maxDistance && distance > rates.maxDistance) return null;
             price = rates.base;
             if (distance > rates.minDistance) price += (distance - rates.minDistance) * rates.perKm;
         }
         price = parseFloat((price * fareInfo.multiplier).toFixed(2));
         const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
         return { ...cu, calculatedPrice: price, calculatedPriceBs: price * 36.50, avgRating, ratingCount: ratings.length, farePeriod: fareInfo.period, fareMultiplier: fareInfo.multiplier };
-    });
+    }).filter(Boolean);
     res.json(conductors);
 });
 
@@ -353,7 +359,7 @@ app.get('/api/trips', async (req, res) => {
 });
 
 app.post('/api/trips', async (req, res) => {
-    const { clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, price, paymentMethod } = req.body;
+    const { clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, price, paymentMethod, orderDetails } = req.body;
     const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [conductorId]);
     if (!conductor) return res.status(404).json({ error: 'Conductor no encontrado' });
     const vehicle = typeof conductor.vehicle === 'string' ? JSON.parse(conductor.vehicle || '{}') : (conductor.vehicle || {});
@@ -363,8 +369,12 @@ app.post('/api/trips', async (req, res) => {
     const finalPrice = parseFloat((price * fareInfo.multiplier).toFixed(2));
     const rate = await getBCVRate();
     const priceBs = parseFloat((finalPrice * rate).toFixed(2));
-    await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)',
-        [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period]);
+    let orderDetailsJson = null;
+    if (orderDetails && vehicle.type === 'mensajero') {
+        orderDetailsJson = JSON.stringify({ ...orderDetails, orderId: 'MENS-' + Date.now().toString().slice(-8) });
+    }
+    await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod, orderdetails) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)',
+        [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period, orderDetailsJson]);
     const trip = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [id]));
     io.emit('trip:created', trip);
     io.to('conductor_' + conductorId).emit('trip:new_request', trip);

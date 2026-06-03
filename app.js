@@ -1,6 +1,6 @@
 const socket = io();
 
-const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 } };
+const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 }, mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 } };
 
 const API = {
     async get(url) { const r = await fetch(url); return r.json(); },
@@ -350,11 +350,12 @@ const App = {
 
 <h3>3. Tarifas y Precios</h3>
 <table>
-    <tr><th>Vehiculo</th><th>Tarifa Base</th><th>Por Kilometro</th><th>Distancia Minima</th></tr>
-    <tr><td>🏍️ Moto</td><td>$0.80</td><td>$0.40/km</td><td>2.5 km</td></tr>
-    <tr><td>🛵 Moto Delivery</td><td>$1.80</td><td>$0.55/km</td><td>2.5 km</td></tr>
-    <tr><td>🚗 Carro</td><td>$1.80</td><td>$0.50/km</td><td>2.5 km</td></tr>
-    <tr><td>🚙 Camioneta</td><td>$4.50</td><td>$0.90/km</td><td>2.5 km</td></tr>
+    <tr><th>Vehiculo</th><th>Tarifa Base</th><th>Por Kilometro</th><th>Distancia</th></tr>
+    <tr><td>🏍️ Moto</td><td>$0.80</td><td>$0.40/km</td><td>Min 2.5 km</td></tr>
+    <tr><td>🛵 Moto Delivery</td><td>$1.80</td><td>$0.55/km</td><td>Min 2.5 km</td></tr>
+    <tr><td>🚗 Carro</td><td>$1.80</td><td>$0.50/km</td><td>Min 2.5 km</td></tr>
+    <tr><td>🚙 Camioneta</td><td>$4.50</td><td>$0.90/km</td><td>Min 2.5 km</td></tr>
+    <tr><td>🚶 Mensajero</td><td>$1.50</td><td>$1.00/km</td><td>Max 2 km</td></tr>
 </table>
 <h4>Recargos por Horario</h4>
 <table>
@@ -384,7 +385,7 @@ const App = {
 <h3>5. Flujo de un Viaje</h3>
 <h4>Para Clientes:</h4>
 <ol>
-    <li>Selecciona tipo de vehiculo (Carro, Camioneta, Moto o Moto Delivery)</li>
+    <li>Selecciona tipo de vehiculo (Carro, Camioneta, Moto, Moto Delivery o Mensajero)</li>
     <li>Ingresa origen y destino</li>
     <li>Revisa conductores disponibles con precio estimado</li>
     <li>Selecciona metodo de pago y confirma</li>
@@ -586,6 +587,8 @@ ${role === 'admin' ? `
             radio.addEventListener('change', (e) => {
                 document.querySelectorAll('input[name="vehicle-type"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
                 e.target.closest('.payment-method-option').classList.add('selected');
+                const mensajeroForm = document.getElementById('mensajero-order-form');
+                if (mensajeroForm) mensajeroForm.style.display = e.target.value === 'mensajero' ? 'block' : 'none';
             });
         });
 
@@ -713,8 +716,10 @@ ${role === 'admin' ? `
         }
         this.calculatedDistance = simulatedKm;
         if (distBadge) { distBadge.innerHTML = `Kilometros calculados: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`; distBadge.style.display = 'block'; }
+        const maxDist = KILOMETER_RATE_CONFIG[vehicleType]?.maxDistance;
+        if (maxDist && simulatedKm > maxDist) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Distancia maxima para ${vehicleType === 'mensajero' ? 'mensajero' : vehicleType} es ${maxDist} km. Tu ruta es ${simulatedKm.toFixed(1)} km.</p></div>`; return; }
         this.foundConductors = await API.get(`/api/conductors/available?distance=${simulatedKm}&vehicleType=${vehicleType}`);
-        if (this.foundConductors.length === 0) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${vehicleType === 'moto' ? 'moto' : vehicleType === 'camioneta' ? 'camioneta' : vehicleType === 'moto_delivery' ? 'moto delivery' : 'carro'} disponibles</p></div>`; return; }
+        if (this.foundConductors.length === 0) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${vehicleType === 'moto' ? 'moto' : vehicleType === 'camioneta' ? 'camioneta' : vehicleType === 'moto_delivery' ? 'moto delivery' : vehicleType === 'mensajero' ? 'mensajero' : 'carro'} disponibles</p></div>`; return; }
         let html = '';
         const fareLabels = { normal: '', pico: ' (HP +25%)', noche: ' (Noche +20%)' };
         const fareTag = fareLabels[this.foundConductors[0]?.farePeriod] || '';
@@ -726,7 +731,7 @@ ${role === 'admin' ? `
             const hasRKM = this.session.balance >= c.calculatedPrice;
             const rs = hasRKM ? '<span class="text-emerald text-xs font-bold">✓ Saldo suficiente</span>' : '<span class="text-red text-xs font-bold">✗ Saldo insuficiente</span>';
             const stars = this.renderStarsSmall(c.avgRating, c.ratingCount);
-            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵' };
+            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵', mensajero: '🚶' };
             const vIcon = vIcons[c.vehicle?.type] || '🚗';
             html += `<div class="glass-card mb-3 border-l-purple p-4 flex justify-between items-center gap-4 flex-wrap">
                 <div class="flex-grow min-w-[200px]"><div class="flex items-center gap-2 mb-1"><h4 class="font-bold text-md text-purple">${c.name}</h4><span class="badge text-emerald bg-purple-dark text-xs">Cel: ${c.phone}</span></div><div class="mt-1 mb-1">${stars}</div><p class="text-sm font-bold text-cyan mt-1">${vIcon} ${c.vehicle.brand} ${c.vehicle.model}</p><p class="text-xs text-gray font-bold">👥 ${c.vehicle.passengers} pax | 💼 ${c.vehicle.suitcases} maletas</p><span class="badge text-cyan mt-1 text-xs">${ml}</span>${paymentMethod === 'rkm' ? `<div class="mt-1">${rs}</div>` : ''}</div>
@@ -741,7 +746,19 @@ ${role === 'admin' ? `
         const origin = document.getElementById('client-origin-address').value;
         const dest = document.getElementById('client-destination-address').value;
         const paymentMethod = document.querySelector('input[name="payment-method"]:checked')?.value || 'rkm';
-        await API.post('/api/trips', { clientId: this.session.id, clientName: this.session.name, clientPhone: this.session.phone, originAddress: origin, destinationAddress: dest, distance: this.calculatedDistance, conductorId, price, paymentMethod });
+        const vehicleType = document.querySelector('input[name="vehicle-type"]:checked')?.value || 'carro';
+        let orderDetails = null;
+        if (vehicleType === 'mensajero') {
+            const serviceType = document.getElementById('mensajero-service-type')?.value || 'documento';
+            const senderName = document.getElementById('mensajero-sender-name')?.value || this.session.name;
+            const senderPhone = document.getElementById('mensajero-sender-phone')?.value || this.session.phone;
+            const receiverName = document.getElementById('mensajero-receiver-name')?.value || '';
+            const receiverPhone = document.getElementById('mensajero-receiver-phone')?.value || '';
+            const description = document.getElementById('mensajero-description')?.value || '';
+            if (!receiverName || !receiverPhone) { this.showToast('Ingresa datos del destinatario.', 'error'); return; }
+            orderDetails = { serviceType, senderName, senderPhone, receiverName, receiverPhone, description };
+        }
+        await API.post('/api/trips', { clientId: this.session.id, clientName: this.session.name, clientPhone: this.session.phone, originAddress: origin, destinationAddress: dest, distance: this.calculatedDistance, conductorId, price, paymentMethod, orderDetails });
         this.showToast('Solicitud enviada al Conductor!', 'success');
         this.updateViewContent();
     },
@@ -869,7 +886,17 @@ ${role === 'admin' ? `
         const overlay = document.getElementById('acceptance-overlay');
         const details = document.getElementById('acceptance-details');
         if (!overlay || !details) return;
-        details.innerHTML = `<div class="detail-row"><span class="detail-label">Conductor</span><span class="detail-value">${trip.conductorName}</span></div><div class="detail-row"><span class="detail-label">Celular</span><span class="detail-value">${trip.conductorPhone}</span></div><div class="detail-row"><span class="detail-label">Vehiculo</span><span class="detail-value">${trip.conductorVehicle}</span></div><div class="detail-row"><span class="detail-label">Ruta</span><span class="detail-value" style="font-size:0.75rem; text-align:right;">${trip.originAddress} → ${trip.destinationAddress}</span></div><div class="detail-row"><span class="detail-label">Distancia</span><span class="detail-value" style="color:#22d3ee;">${trip.distance.toFixed(1)} km</span></div><div class="detail-row"><span class="detail-label">Tarifa</span><span class="detail-value" style="color:#34d399; font-size:1.1rem;">$${trip.price.toFixed(2)} <span style="font-size:0.75rem; color:#9ca3af;">Bs ${this.toBs(trip.price)}</span></span></div>`;
+        let html = `<div class="detail-row"><span class="detail-label">Conductor</span><span class="detail-value">${trip.conductorName}</span></div><div class="detail-row"><span class="detail-label">Celular</span><span class="detail-value">${trip.conductorPhone}</span></div><div class="detail-row"><span class="detail-label">Vehiculo</span><span class="detail-value">${trip.conductorVehicle}</span></div><div class="detail-row"><span class="detail-label">Ruta</span><span class="detail-value" style="font-size:0.75rem; text-align:right;">${trip.originAddress} → ${trip.destinationAddress}</span></div><div class="detail-row"><span class="detail-label">Distancia</span><span class="detail-value" style="color:#22d3ee;">${trip.distance.toFixed(1)} km</span></div><div class="detail-row"><span class="detail-label">Tarifa</span><span class="detail-value" style="color:#34d399; font-size:1.1rem;">$${trip.price.toFixed(2)} <span style="font-size:0.75rem; color:#9ca3af;">Bs ${this.toBs(trip.price)}</span></span></div>`;
+        if (trip.orderDetails) {
+            const od = trip.orderDetails;
+            const serviceIcons = { documento: '📄', paquete: '📦', botellon: '💧', compra: '🛒' };
+            html += `<div class="detail-row" style="background:rgba(6,182,212,0.1); border-radius:8px; padding:8px; margin-top:8px;"><span class="detail-label">📋 Orden: ${od.orderId || 'N/A'}</span></div>`;
+            html += `<div class="detail-row"><span class="detail-label">Servicio</span><span class="detail-value">${serviceIcons[od.serviceType] || '📄'} ${od.serviceType}</span></div>`;
+            html += `<div class="detail-row"><span class="detail-label">Remitente</span><span class="detail-value">${od.senderName} (${od.senderPhone})</span></div>`;
+            html += `<div class="detail-row"><span class="detail-label">Destinatario</span><span class="detail-value">${od.receiverName} (${od.receiverPhone})</span></div>`;
+            if (od.description) html += `<div class="detail-row"><span class="detail-label">Descripcion</span><span class="detail-value">${od.description}</span></div>`;
+        }
+        details.innerHTML = html;
         overlay.classList.remove('hidden');
         this.showToast('Tu conductor ha aceptado el servicio!', 'success');
     },
@@ -1195,7 +1222,7 @@ ${role === 'admin' ? `
         const usersTable = document.getElementById('admin-users-list');
         let html = '<table class="table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Vehiculo</th><th>Billetera</th><th>2FA</th><th>Rating</th></tr></thead><tbody>';
         users.forEach(u => {
-            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵' };
+            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵', mensajero: '🚶' };
             const vt = u.role === 'conductor' ? `${vIcons[u.vehicle?.type] || '🚗'} ${u.vehicle?.brand} ${u.vehicle?.model}` : '-';
             const avg = u.ratings?.length > 0 ? (u.ratings.reduce((a, b) => a + b, 0) / u.ratings.length).toFixed(1) : '-';
             const tfa = u.twoFactorEnabled ? '<span class="badge text-emerald">ON</span>' : '<span class="badge text-gray">OFF</span>';

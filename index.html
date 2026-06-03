@@ -204,7 +204,7 @@
                                 <h3 class="text-sm font-bold text-purple uppercase mb-3">Ficha de Postulacion de Conductor</h3>
                                 <div class="form-group mb-3">
                     <label>Tipo de Vehiculo</label>
-                    <div class="payment-methods-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="payment-methods-grid" style="grid-template-columns: repeat(3, 1fr);">
                         <label class="payment-method-option selected" data-method="carro">
                             <input type="radio" name="reg-vehicle-type" value="carro" checked>
                             <span class="pm-icon">🚗</span>
@@ -224,6 +224,11 @@
                             <input type="radio" name="reg-vehicle-type" value="moto_delivery">
                             <span class="pm-icon">🛵</span>
                             <span class="pm-name">Moto Delivery</span>
+                        </label>
+                        <label class="payment-method-option" data-method="mensajero">
+                            <input type="radio" name="reg-vehicle-type" value="mensajero">
+                            <span class="pm-icon">🚶</span>
+                            <span class="pm-name">Mensajero</span>
                         </label>
                     </div>
                                 </div>
@@ -272,7 +277,7 @@
                         <form id="client-search-form">
                             <div class="form-group">
                     <label class="payment-methods-label">Tipo de Vehiculo</label>
-                    <div class="payment-methods-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="payment-methods-grid" style="grid-template-columns: repeat(3, 1fr);">
                         <label class="payment-method-option selected" data-method="carro">
                             <input type="radio" name="vehicle-type" value="carro" checked>
                             <span class="pm-icon">🚗</span>
@@ -296,6 +301,12 @@
                             <span class="pm-icon">🛵</span>
                             <span class="pm-name">Moto Delivery</span>
                             <span class="pm-desc">Paqueteria y alimentos</span>
+                        </label>
+                        <label class="payment-method-option" data-method="mensajero">
+                            <input type="radio" name="vehicle-type" value="mensajero">
+                            <span class="pm-icon">🚶</span>
+                            <span class="pm-name">Mensajero</span>
+                            <span class="pm-desc">Docs, paq. &lt;2kg, compras</span>
                         </label>
                     </div>
                             </div>
@@ -325,6 +336,42 @@
                                         <span class="pm-name">Pago Móvil</span>
                                         <span class="pm-desc">Transferencia bancaria</span>
                                     </label>
+                                </div>
+                            </div>
+                            <div id="mensajero-order-form" class="mt-3 mb-3 p-3 bg-gray rounded" style="display: none;">
+                                <p class="text-xs font-bold text-cyan mb-2">📋 Datos del Envio (Mensajero)</p>
+                                <div class="form-group mb-2">
+                                    <label class="text-xs">Tipo de Servicio</label>
+                                    <select id="mensajero-service-type" class="input">
+                                        <option value="documento">📄 Documento</option>
+                                        <option value="paquete">📦 Paquete (&lt;2kg)</option>
+                                        <option value="botellon">💧 Botellon de Agua</option>
+                                        <option value="compra">🛒 Retiro de Compra</option>
+                                    </select>
+                                </div>
+                                <div class="grid grid-2 gap-2 mb-2">
+                                    <div class="form-group mb-0">
+                                        <label class="text-xs">Remitente</label>
+                                        <input type="text" id="mensajero-sender-name" class="input" placeholder="Nombre">
+                                    </div>
+                                    <div class="form-group mb-0">
+                                        <label class="text-xs">Tel Remitente</label>
+                                        <input type="text" id="mensajero-sender-phone" class="input" placeholder="0412-0000000">
+                                    </div>
+                                </div>
+                                <div class="grid grid-2 gap-2 mb-2">
+                                    <div class="form-group mb-0">
+                                        <label class="text-xs">Destinatario</label>
+                                        <input type="text" id="mensajero-receiver-name" class="input" placeholder="Nombre">
+                                    </div>
+                                    <div class="form-group mb-0">
+                                        <label class="text-xs">Tel Destinatario</label>
+                                        <input type="text" id="mensajero-receiver-phone" class="input" placeholder="0414-0000000">
+                                    </div>
+                                </div>
+                                <div class="form-group mb-0">
+                                    <label class="text-xs">Descripcion del Envio</label>
+                                    <input type="text" id="mensajero-description" class="input" placeholder="Ej. Documento legal, Paquete 1.5kg, Botellon 19L">
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-purple w-full mt-2">Buscar Conductores Disponibles</button>
