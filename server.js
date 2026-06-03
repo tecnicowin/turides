@@ -165,7 +165,9 @@ function getFarePeriod() {
 
 const KILOMETER_RATE = {
     carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 },
-    moto: { base: 0.80, perKm: 0.20, minDistance: 2.5 }
+    camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 },
+    moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 },
+    moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 }
 };
 
 // === AUTH ===

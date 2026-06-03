@@ -1,6 +1,6 @@
 const socket = io();
 
-const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.20, minDistance: 2.5 } };
+const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 } };
 
 const API = {
     async get(url) { const r = await fetch(url); return r.json(); },
@@ -332,7 +332,7 @@ const App = {
 </style>
 
 <h3>1. Bienvenido a TuRides</h3>
-<p>TuRides es una plataforma de transporte privado de pasajeros en Venezuela. Puedes solicitar viajes en <strong>Carro</strong> o <strong>Moto</strong>, pagar con billetera digital (RKM) o Pago Movil, y calificar a tu conductor o cliente.</p>
+<p>TuRides es una plataforma de transporte privado de pasajeros en Venezuela. Puedes solicitar viajes en <strong>Carro</strong>, <strong>Camioneta</strong>, <strong>Moto</strong> o <strong>Moto Delivery</strong>, pagar con billetera digital (RKM) o Pago Movil, y calificar a tu conductor o cliente.</p>
 
 <h3>2. Cuentas y Acceso</h3>
 <h4>Registro</h4>
@@ -351,8 +351,10 @@ const App = {
 <h3>3. Tarifas y Precios</h3>
 <table>
     <tr><th>Vehiculo</th><th>Tarifa Base</th><th>Por Kilometro</th><th>Distancia Minima</th></tr>
+    <tr><td>🏍️ Moto</td><td>$0.80</td><td>$0.40/km</td><td>2.5 km</td></tr>
+    <tr><td>🛵 Moto Delivery</td><td>$1.80</td><td>$0.55/km</td><td>2.5 km</td></tr>
     <tr><td>🚗 Carro</td><td>$1.80</td><td>$0.50/km</td><td>2.5 km</td></tr>
-    <tr><td>🏍️ Moto</td><td>$0.80</td><td>$0.20/km</td><td>2.5 km</td></tr>
+    <tr><td>🚙 Camioneta</td><td>$4.50</td><td>$0.90/km</td><td>2.5 km</td></tr>
 </table>
 <h4>Recargos por Horario</h4>
 <table>
@@ -382,7 +384,7 @@ const App = {
 <h3>5. Flujo de un Viaje</h3>
 <h4>Para Clientes:</h4>
 <ol>
-    <li>Selecciona tipo de vehiculo (Carro/Moto)</li>
+    <li>Selecciona tipo de vehiculo (Carro, Camioneta, Moto o Moto Delivery)</li>
     <li>Ingresa origen y destino</li>
     <li>Revisa conductores disponibles con precio estimado</li>
     <li>Selecciona metodo de pago y confirma</li>
@@ -712,7 +714,7 @@ ${role === 'admin' ? `
         this.calculatedDistance = simulatedKm;
         if (distBadge) { distBadge.innerHTML = `Kilometros calculados: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`; distBadge.style.display = 'block'; }
         this.foundConductors = await API.get(`/api/conductors/available?distance=${simulatedKm}&vehicleType=${vehicleType}`);
-        if (this.foundConductors.length === 0) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${vehicleType === 'moto' ? 'moto' : 'carro'} disponibles</p></div>`; return; }
+        if (this.foundConductors.length === 0) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${vehicleType === 'moto' ? 'moto' : vehicleType === 'camioneta' ? 'camioneta' : vehicleType === 'moto_delivery' ? 'moto delivery' : 'carro'} disponibles</p></div>`; return; }
         let html = '';
         const fareLabels = { normal: '', pico: ' (HP +25%)', noche: ' (Noche +20%)' };
         const fareTag = fareLabels[this.foundConductors[0]?.farePeriod] || '';
@@ -724,7 +726,8 @@ ${role === 'admin' ? `
             const hasRKM = this.session.balance >= c.calculatedPrice;
             const rs = hasRKM ? '<span class="text-emerald text-xs font-bold">✓ Saldo suficiente</span>' : '<span class="text-red text-xs font-bold">✗ Saldo insuficiente</span>';
             const stars = this.renderStarsSmall(c.avgRating, c.ratingCount);
-            const vIcon = c.vehicle?.type === 'moto' ? '🏍️' : '🚗';
+            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵' };
+            const vIcon = vIcons[c.vehicle?.type] || '🚗';
             html += `<div class="glass-card mb-3 border-l-purple p-4 flex justify-between items-center gap-4 flex-wrap">
                 <div class="flex-grow min-w-[200px]"><div class="flex items-center gap-2 mb-1"><h4 class="font-bold text-md text-purple">${c.name}</h4><span class="badge text-emerald bg-purple-dark text-xs">Cel: ${c.phone}</span></div><div class="mt-1 mb-1">${stars}</div><p class="text-sm font-bold text-cyan mt-1">${vIcon} ${c.vehicle.brand} ${c.vehicle.model}</p><p class="text-xs text-gray font-bold">👥 ${c.vehicle.passengers} pax | 💼 ${c.vehicle.suitcases} maletas</p><span class="badge text-cyan mt-1 text-xs">${ml}</span>${paymentMethod === 'rkm' ? `<div class="mt-1">${rs}</div>` : ''}</div>
                 <div class="text-right flex flex-col gap-2 min-w-[150px]"><div><span class="text-xs text-gray block">Costo</span><span class="text-2xl font-extrabold text-emerald">$${c.calculatedPrice.toFixed(2)}</span><br><span class="text-xs text-gray">Bs ${this.toBs(c.calculatedPrice)}</span></div><div class="flex gap-1 justify-end"><button onclick="App.hireConductor('${c.id}', ${c.calculatedPrice})" class="btn btn-purple btn-sm" ${paymentMethod === 'rkm' && !hasRKM ? 'disabled' : ''}>Contratar</button></div></div>
@@ -1192,7 +1195,8 @@ ${role === 'admin' ? `
         const usersTable = document.getElementById('admin-users-list');
         let html = '<table class="table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Vehiculo</th><th>Billetera</th><th>2FA</th><th>Rating</th></tr></thead><tbody>';
         users.forEach(u => {
-            const vt = u.role === 'conductor' ? `${u.vehicle?.type === 'moto' ? '🏍️' : '🚗'} ${u.vehicle?.brand} ${u.vehicle?.model}` : '-';
+            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵' };
+            const vt = u.role === 'conductor' ? `${vIcons[u.vehicle?.type] || '🚗'} ${u.vehicle?.brand} ${u.vehicle?.model}` : '-';
             const avg = u.ratings?.length > 0 ? (u.ratings.reduce((a, b) => a + b, 0) / u.ratings.length).toFixed(1) : '-';
             const tfa = u.twoFactorEnabled ? '<span class="badge text-emerald">ON</span>' : '<span class="badge text-gray">OFF</span>';
             html += `<tr><td><strong>${u.name}</strong></td><td>${u.email}</td><td><span class="badge ${u.role === 'conductor' ? 'text-purple' : u.role === 'admin' ? 'text-red' : 'text-cyan'}">${u.role.toUpperCase()}</span></td><td>${vt}</td><td class="font-bold text-emerald">$${(u.balance || 0).toFixed(2)} <span class="text-xs text-gray">Bs ${this.toBs(u.balance || 0)}</span></td><td>${tfa}</td><td>${avg !== '-' ? this.renderStarsSmall(avg, u.ratings.length) : '-'}</td></tr>`;
