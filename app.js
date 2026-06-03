@@ -1180,16 +1180,21 @@ ${role === 'admin' ? `
         }
 
         if (approvedW.length > 0) {
+            const showCount = this._withdrawalsShowAll ? approvedW.length : 3;
+            const hiddenCount = approvedW.length - showCount;
             html += `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-emerald">✅ Retiros Aprobados/Realizados (${approvedW.length})</h3>`;
-            approvedW.slice(0, 5).forEach(w => {
+            approvedW.slice(0, showCount).forEach(w => {
                 const date = w.reviewedAt ? new Date(w.reviewedAt).toLocaleDateString() : '-';
                 const net = w.netAmount || (w.amount - (w.commission || 0));
                 if (w.status === 'realizado') {
-                    html += `<div class="p-3 bg-gray rounded mb-2"><div class="flex justify-between items-center"><span class="font-bold text-emerald">$${net.toFixed(2)} transferidos</span><span class="badge text-emerald">REALIZADO</span></div><p class="text-xs text-gray mt-1">Ref: <strong class="text-cyan">${w.reference || 'Sin referencia'}</strong> | ${date}</p></div>`;
+                    html += `<div class="p-3 bg-gray rounded mb-2"><div class="flex justify-between items-center"><span class="font-bold text-emerald">$${net.toFixed(2)} transferidos</span><span class="badge text-emerald">REALIZADO</span></div><p class="text-xs text-gray mt-1">Ref: <strong class="text-cyan">${w.reference || 'Sin referencia'}</strong> | ${date}</p><div class="mt-2 flex gap-2"><a href="/api/wallet/withdrawals/${w.id}/ticket" target="_blank" class="btn btn-purple btn-sm" style="font-size:10px;padding:4px 8px;">📄 Ver Ticket PDF</a></div></div>`;
                 } else {
                     html += `<div class="p-2 bg-gray rounded mb-1 flex justify-between text-xs"><span>$${w.amount.toFixed(2)} - ${date}</span><span class="badge text-emerald">Aprobado</span></div>`;
                 }
             });
+            if (hiddenCount > 0 || (showCount < approvedW.length && !this._withdrawalsShowAll)) {
+                html += `<button onclick="App._withdrawalsShowAll = !App._withdrawalsShowAll; App.renderConductorWallet();" class="btn btn-sm w-full mt-2" style="background:rgba(255,255,255,0.1);color:#999;font-size:11px;">${this._withdrawalsShowAll ? '⬆️ Mostrar menos' : `⬇️ Mostrar ${hiddenCount} mas`}</button>`;
+            }
             html += `</div>`;
         }
 
@@ -1561,6 +1566,71 @@ ${role === 'admin' ? `
 
         try { this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
         try { this.renderAdminBackup(); } catch(e) { console.error('Backup panel error:', e); }
+
+        const reportDate = document.getElementById('admin-report-date');
+        if (reportDate && !reportDate.value) reportDate.value = new Date().toISOString().slice(0, 10);
+    },
+
+    async generateDailyReport() {
+        const date = document.getElementById('admin-report-date')?.value || new Date().toISOString().slice(0, 10);
+        const container = document.getElementById('admin-daily-report');
+        if (!container) return;
+        container.innerHTML = `<p class="text-center text-cyan p-4">Generando reporte...</p>`;
+        const report = await API.get(`/api/admin/daily-report?date=${date}`);
+        const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+        let html = `<div id="daily-report-content">`;
+        html += `<div class="p-4 bg-gray rounded mb-4 text-center"><h3 class="font-bold text-purple text-lg">REPORTE DIARIO - ${date}</h3><p class="text-xs text-gray">Generado: ${new Date().toLocaleString()}</p></div>`;
+        html += `<div class="grid grid-4 gap-3 mb-4">`;
+        html += `<div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">Viajes Totales</p><p class="text-xl font-extrabold text-purple">${report.totalTrips}</p></div>`;
+        html += `<div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">Completados</p><p class="text-xl font-extrabold text-emerald">${report.completedTrips}</p></div>`;
+        html += `<div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">Volumen Total</p><p class="text-xl font-extrabold text-cyan">$${report.totalVolume.toFixed(2)}</p></div>`;
+        html += `<div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">Comision Plataforma</p><p class="text-xl font-extrabold text-yellow">$${report.totalCommission.toFixed(2)}</p></div>`;
+        html += `</div>`;
+        if (report.pendingPayments > 0) {
+            html += `<div class="p-3 bg-dark rounded border-l-yellow mb-4"><p class="text-xs text-yellow font-bold">⚠️ ${report.pendingPayments} pago(s) movil pendiente(s) de verificacion</p></div>`;
+        }
+        html += `<h3 class="font-bold text-purple mb-3">📋 Resumen por Tipo de Servicio</h3>`;
+        html += `<table class="table mb-4"><thead><tr><th>Tipo</th><th>Viajes</th><th>Volumen</th><th>Comision</th><th>Porcentaje</th></tr></thead><tbody>`;
+        Object.entries(report.byVehicleType).forEach(([type, data]) => {
+            const pct = report.totalVolume > 0 ? ((data.totalVolume / report.totalVolume) * 100).toFixed(1) : 0;
+            html += `<tr><td><strong>${type}</strong></td><td>${data.count}</td><td class="font-bold text-emerald">$${data.totalVolume.toFixed(2)}</td><td class="font-bold text-yellow">$${data.totalCommission.toFixed(2)}</td><td>${pct}%</td></tr>`;
+        });
+        html += `<tr class="font-bold" style="background:rgba(139,92,246,0.1)"><td>TOTAL</td><td>${report.totalTrips}</td><td class="text-emerald">$${report.totalVolume.toFixed(2)}</td><td class="text-yellow">$${report.totalCommission.toFixed(2)}</td><td>100%</td></tr>`;
+        html += `</tbody></table>`;
+        if (report.trips && report.trips.length > 0) {
+            html += `<h3 class="font-bold text-purple mb-3">📝 Detalle de Viajes</h3>`;
+            report.trips.forEach(t => {
+                const statusColors = { completado: 'text-emerald', pago_verificado: 'text-cyan', calificado: 'text-purple', rechazado: 'text-red', pendiente: 'text-yellow', aceptado: 'text-purple', pago_movil_pendiente: 'text-yellow' };
+                const sc = statusColors[t.status] || 'text-gray';
+                html += `<div class="p-3 bg-gray rounded mb-2"><div class="flex justify-between items-start"><div><p class="text-xs"><strong>${t.clientName || 'N/A'}</strong> → <strong>${t.conductorName || 'N/A'}</strong></p><p class="text-xs text-gray">${t.originAddress} → ${t.destinationAddress} | ${t.distance?.toFixed(1) || 0}km</p></div><div class="text-right"><p class="font-bold text-emerald">$${t.price.toFixed(2)}</p><p class="text-xs ${sc}">${t.status.toUpperCase()}</p></div></div>`;
+                if (t.platformCommission > 0) {
+                    html += `<p class="text-xs text-yellow mt-1">Comision: $${t.platformCommission.toFixed(2)}</p>`;
+                }
+                html += `</div>`;
+            });
+        }
+        if (report.withdrawals && report.withdrawals.length > 0) {
+            html += `<h3 class="font-bold text-purple mb-3">💸 Retiros del Dia (${report.withdrawals.length})</h3>`;
+            html += `<table class="table mb-4"><thead><tr><th>Conductor</th><th>Monto</th><th>Comision</th><th>Neto</th><th>Estado</th></tr></thead><tbody>`;
+            report.withdrawals.forEach(w => {
+                const sc = w.status === 'aprobada' ? 'text-emerald' : w.status === 'realizado' ? 'text-purple' : w.status === 'rechazada' ? 'text-red' : 'text-cyan';
+                html += `<tr><td><strong>${w.conductorName || '-'}</strong></td><td>$${w.amount.toFixed(2)}</td><td>$${(w.commission || 0).toFixed(2)}</td><td class="font-bold text-emerald">$${(w.netAmount || w.amount).toFixed(2)}</td><td class="${sc} font-bold">${w.status.toUpperCase()}</td></tr>`;
+            });
+            html += `</tbody></table>`;
+        }
+        html += `</div>`;
+        container.innerHTML = html;
+    },
+
+    printDailyReport() {
+        const content = document.getElementById('daily-report-content');
+        if (!content) { this.showToast('Genera el reporte primero.', 'warning'); return; }
+        const win = window.open('', '_blank');
+        win.document.write('<html><head><title>Reporte Diario TuRides</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#8b5cf6;color:white}tr:nth-child(even){background:#f9f9f9}.grid{display:grid;gap:10px}.grid-4{grid-template-columns:repeat(4,1fr)}.text-center{text-align:center}.font-bold{font-weight:bold}.text-emerald{color:#10b981}.text-yellow{color:#f59e0b}.text-purple{color:#8b5cf6}.text-cyan{color:#06b6d4}.text-gray{color:#999}.text-xl{font-size:1.2rem}.text-xs{font-size:0.7rem}.bg-gray{background:#1a1a2e;padding:10px;border-radius:8px;margin-bottom:8px}.bg-dark{background:#111;padding:10px;border-radius:8px}.p-3{padding:12px}.mb-4{margin-bottom:16px}.rounded{border-radius:8px}</style></head><body>');
+        win.document.write(content.innerHTML);
+        win.document.write('</body></html>');
+        win.document.close();
+        win.print();
     },
 
     async adminVerifyPagoMovil(tripId) {
@@ -1639,7 +1709,7 @@ ${role === 'admin' ? `
                     </div>
                     ${w.status === 'pendiente' ? `<div class="flex gap-2 mt-3"><button onclick="App.adminApproveWithdrawal('${w.id}')" class="btn btn-emerald flex-1">✓ Aprobar</button><button onclick="App.adminReviewWithdrawal('${w.id}', 'rechazada')" class="btn btn-red flex-1">✗ Rechazar</button></div>` : ''}
                     ${w.status === 'aprobada' ? `<div class="mt-3"><p class="text-xs text-cyan font-bold mb-2">Transferir $${netAmount.toFixed(2)} a la cuenta del conductor y luego confirmar:</p><div class="form-group mb-2"><input type="text" id="wdr-ref-${w.id}" class="input" placeholder="Referencia de la transferencia bancaria"></div><div class="flex gap-2"><button onclick="App.adminRealizeWithdrawal('${w.id}')" class="btn btn-purple flex-1">✓ Transferencia Realizada</button></div></div>` : ''}
-                    ${w.status === 'realizado' ? `<div class="mt-2 p-2 bg-emerald rounded text-xs"><p class="font-bold text-emerald">✅ Transferencia realizada</p><p>Ref: <strong>${w.reference || '-'}</strong></p></div>` : ''}
+                    ${w.status === 'realizado' ? `<div class="mt-2 p-2 bg-emerald rounded text-xs"><p class="font-bold text-emerald">✅ Transferencia realizada</p><p>Ref: <strong>${w.reference || '-'}</strong></p><div class="mt-2"><a href="/api/wallet/withdrawals/${w.id}/ticket" target="_blank" class="btn btn-purple btn-sm" style="font-size:10px;padding:4px 8px;">📄 Ver Ticket PDF</a></div></div>` : ''}
                     ${w.status === 'rechazada' ? `<div class="mt-2 text-xs text-gray">${w.adminNote ? `<strong>Motivo:</strong> ${w.adminNote}` : 'Rechazado'}</div>` : ''}
                 </div>`;
             });

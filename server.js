@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const PDFDocument = require('pdfkit');
 const { dbRun, dbGet, dbAll, dbExec, dbClientExec } = require('./db');
 
 const app = express();
@@ -633,8 +634,10 @@ app.post('/api/wallet/withdraw', async (req, res) => {
     if (conductor.balance < amount) return res.status(400).json({ error: 'Saldo insuficiente' });
     const bankInfo = typeof conductor.bankinfo === 'string' ? JSON.parse(conductor.bankinfo || '{}') : (conductor.bankinfo || {});
     if (!bankInfo.bank || !bankInfo.account) return res.status(400).json({ error: 'Configura tu cuenta bancaria primero' });
+    const vehicle = typeof conductor.vehicle === 'string' ? JSON.parse(conductor.vehicle || '{}') : (conductor.vehicle || {});
+    const isMudanza = vehicle.type && (vehicle.type.startsWith('mudanza_') || vehicle.type === 'camioneta');
     const config = await getConfig();
-    const commissionPct = parseFloat(config.withdrawalCommission || '10');
+    const commissionPct = isMudanza ? 0 : parseFloat(config.withdrawalCommission || '10');
     const commission = parseFloat((amount * commissionPct / 100).toFixed(2));
     const netAmount = parseFloat((amount - commission).toFixed(2));
     const id = 'WDR_' + Date.now();
@@ -683,6 +686,82 @@ app.put('/api/wallet/withdrawals/:id', async (req, res) => {
     }
     io.emit('withdrawal:updated', { id: req.params.id, status });
     res.json({ success: true });
+});
+
+// === WITHDRAWAL PDF TICKET ===
+app.get('/api/wallet/withdrawals/:id/ticket', async (req, res) => {
+    const withdrawal = await dbGet('SELECT * FROM withdrawals WHERE id = $1', [req.params.id]);
+    if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=ticket_retiro_${withdrawal.id}.pdf`);
+    doc.pipe(res);
+    const bankInfo = typeof withdrawal.bankinfo === 'string' ? JSON.parse(withdrawal.bankinfo || '{}') : (withdrawal.bankinfo || {});
+    const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano de Credito', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo Soberano', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+    const bankName = bankNames[bankInfo.bank] || bankInfo.bank || '-';
+    doc.fontSize(20).font('Helvetica-Bold').text('TuRides', { align: 'center' });
+    doc.fontSize(14).font('Helvetica').text('Comprobante de Retiro', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(10).fillColor('#666');
+    doc.text(`Fecha: ${withdrawal.createdat ? new Date(withdrawal.createdat).toLocaleString() : '-'}`, { align: 'left' });
+    doc.text(`ID: ${withdrawal.id}`, { align: 'left' });
+    doc.moveDown();
+    doc.fontSize(12).fillColor('#000').font('Helvetica-Bold').text('Datos del Conductor');
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Nombre: ${withdrawal.conductorname}`);
+    doc.moveDown();
+    doc.fontSize(12).font('Helvetica-Bold').text('Detalle del Retiro');
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Monto solicitado: $${withdrawal.amount.toFixed(2)}`);
+    doc.text(`Tasa BCV: Bs ${withdrawal.amountbs / withdrawal.amount}/USD`);
+    doc.text(`Monto en Bs: Bs ${withdrawal.amountbs.toFixed(2)}`);
+    doc.text(`Comision de retiro: $${withdrawal.commission.toFixed(2)} (${withdrawal.commission > 0 ? ((withdrawal.commission / withdrawal.amount) * 100).toFixed(0) + '%' : '0% - Mudanza'})`);
+    doc.text(`Monto a transferir: $${withdrawal.netamount.toFixed(2)}`);
+    doc.moveDown();
+    doc.fontSize(12).font('Helvetica-Bold').text('Datos Bancarios');
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Banco: ${bankName}`);
+    doc.text(`Cuenta: ${bankInfo.account || '-'}`);
+    doc.text(`Titular: ${bankInfo.name || '-'}`);
+    doc.text(`Telefono: ${bankInfo.phone || '-'}`);
+    doc.moveDown();
+    doc.fontSize(10).fillColor('#999').text(`Estado: ${withdrawal.status.toUpperCase()}`);
+    if (withdrawal.reference) {
+        doc.text(`Referencia: ${withdrawal.reference}`);
+    }
+    if (withdrawal.reviewedat) {
+        doc.text(`Procesado: ${new Date(withdrawal.reviewedat).toLocaleString()}`);
+    }
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor('#ccc').text('TuRides - Comprobante de retiro generado automaticamente', { align: 'center' });
+    doc.end();
+});
+
+// === ADMIN DAILY REPORT ===
+app.get('/api/admin/daily-report', async (req, res) => {
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const trips = await dbAll('SELECT * FROM trips WHERE createdat LIKE $1 ORDER BY createdat ASC', [date + '%']);
+    const transactions = await dbAll('SELECT * FROM transactions WHERE createdat LIKE $1 ORDER BY createdat ASC', [date + '%']);
+    const withdrawals = await dbAll('SELECT * FROM withdrawals WHERE createdat LIKE $1 ORDER BY createdat ASC', [date + '%']);
+    const parsedTrips = trips.map(t => parseTrip(t));
+    const byVehicleType = {};
+    parsedTrips.forEach(t => {
+        const vehicleType = t.conductorVehicle || 'N/A';
+        let category = 'Otros';
+        if (vehicleType.toLowerCase().includes('carro')) category = 'Carro';
+        else if (vehicleType.toLowerCase().includes('camioneta') || vehicleType.toLowerCase().includes('mudanza') || vehicleType.toLowerCase().includes('pickup')) category = 'Camiones/Mudanza';
+        else if (vehicleType.toLowerCase().includes('moto')) category = 'Motos';
+        if (!byVehicleType[category]) byVehicleType[category] = { trips: [], totalVolume: 0, totalCommission: 0, count: 0 };
+        byVehicleType[category].trips.push(t);
+        byVehicleType[category].totalVolume += t.price;
+        byVehicleType[category].totalCommission += (t.platformCommission || 0);
+        byVehicleType[category].count++;
+    });
+    const totalVolume = parsedTrips.reduce((a, t) => a + t.price, 0);
+    const totalCommission = parsedTrips.reduce((a, t) => a + (t.platformCommission || 0), 0);
+    const completedTrips = parsedTrips.filter(t => ['completado', 'pago_verificado', 'calificado'].includes(t.status));
+    const pendingPayments = parsedTrips.filter(t => t.status === 'pago_movil_pendiente');
+    res.json({ date, totalTrips: parsedTrips.length, completedTrips: completedTrips.length, totalVolume, totalCommission, byVehicleType, pendingPayments: pendingPayments.length, transactions: transactions.map(t => mapRow(t, TXN_MAP)), withdrawals: withdrawals.map(w => mapRow(w, WITHDRAWAL_MAP)) });
 });
 
 // === TRANSACTIONS ===

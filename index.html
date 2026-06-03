@@ -591,6 +591,19 @@
             </div>
 
             <div class="glass-card mt-4">
+                <h2 class="text-xl font-bold mb-4">📊 Reporte Diario de Operaciones</h2>
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="form-group mb-0 flex-grow">
+                        <label>Fecha</label>
+                        <input type="date" id="admin-report-date" class="input" value="">
+                    </div>
+                    <button onclick="App.generateDailyReport()" class="btn btn-purple" style="margin-top: 1.2rem;">Generar Reporte</button>
+                    <button onclick="App.printDailyReport()" class="btn btn-emerald" style="margin-top: 1.2rem;">🖨️ Imprimir</button>
+                </div>
+                <div id="admin-daily-report"></div>
+            </div>
+
+            <div class="glass-card mt-4">
                 <h2 class="text-xl font-bold mb-4">🛠️ Panel de Soporte <span id="admin-stat-pending" class="badge text-cyan">0</span></h2>
                 <p class="text-xs text-gray mb-4">Gestiona recargas de clientes y retiros de conductores.</p>
                 <div id="admin-support-panel"></div>
