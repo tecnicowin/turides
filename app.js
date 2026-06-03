@@ -961,7 +961,7 @@ ${role === 'admin' ? `
         const hasBank = bankInfo.bank && bankInfo.account;
 
         const trips = await API.get('/api/trips');
-        const myCompleted = trips.filter(t => t.conductorId === this.session.id && t.status === 'pago_verificado');
+        const myCompleted = trips.filter(t => t.conductorId === this.session.id && ['completado', 'pago_verificado', 'calificado'].includes(t.status) && t.paymentstatus === 'pagado');
         const totalEarned = myCompleted.reduce((acc, t) => acc + t.price, 0);
 
         const banks = [
