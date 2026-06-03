@@ -230,6 +230,11 @@
                             <span class="pm-icon">🚶</span>
                             <span class="pm-name">Mensajero</span>
                         </label>
+                        <label class="payment-method-option" data-method="mudanza">
+                            <input type="radio" name="reg-vehicle-type" value="mudanza">
+                            <span class="pm-icon">🚚</span>
+                            <span class="pm-name">Mudanza</span>
+                        </label>
                     </div>
                                 </div>
                                 <div class="grid grid-2 gap-3 mb-3">
@@ -308,6 +313,12 @@
                             <span class="pm-name">Mensajero</span>
                             <span class="pm-desc">Docs, paq. &lt;2kg, compras</span>
                         </label>
+                        <label class="payment-method-option" data-method="mudanza">
+                            <input type="radio" name="vehicle-type" value="mudanza">
+                            <span class="pm-icon">🚚</span>
+                            <span class="pm-name">Carga/Mudanza</span>
+                            <span class="pm-desc">Pick-Up, 3.5 ton, 7 ton</span>
+                        </label>
                     </div>
                             </div>
                             <div class="form-group">
@@ -372,6 +383,20 @@
                                 <div class="form-group mb-0">
                                     <label class="text-xs">Descripcion del Envio</label>
                                     <input type="text" id="mensajero-description" class="input" placeholder="Ej. Documento legal, Paquete 1.5kg, Botellon 19L">
+                                </div>
+                            </div>
+                            <div id="mudanza-order-form" class="mt-3 mb-3 p-3 bg-gray rounded" style="display: none;">
+                                <p class="text-xs font-bold text-cyan mb-2">🚚 Tipo de Vehiculo para Mudanza</p>
+                                <div class="form-group mb-2">
+                                    <select id="mudanza-subtype" class="input">
+                                        <option value="mudanza_pickup">🛻 Pick-Up (1 ton) — $50</option>
+                                        <option value="mudanza_350">🚛 Camion 350 (3.5 ton) — $100</option>
+                                        <option value="mudanza_750">🚚 Camion 750 (7 ton) — $180</option>
+                                    </select>
+                                </div>
+                                <div class="form-group mb-0">
+                                    <label class="text-xs">Descripcion de la Mudanza</label>
+                                    <input type="text" id="mudanza-description" class="input" placeholder="Ej. Mudanza apartamento 2 hab, Electrodomesticos">
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-purple w-full mt-2">Buscar Conductores Disponibles</button>

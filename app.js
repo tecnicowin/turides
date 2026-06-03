@@ -1,6 +1,6 @@
 const socket = io();
 
-const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 }, mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 } };
+const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 }, mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 }, mudanza: { flatRate: true }, mudanza_pickup: { base: 50, perKm: 0, flatRate: true }, mudanza_350: { base: 100, perKm: 0, flatRate: true }, mudanza_750: { base: 180, perKm: 0, flatRate: true } };
 
 const API = {
     async get(url) { const r = await fetch(url); return r.json(); },
@@ -356,6 +356,9 @@ const App = {
     <tr><td>🚗 Carro</td><td>$1.80</td><td>$0.50/km</td><td>Min 2.5 km</td></tr>
     <tr><td>🚙 Camioneta</td><td>$4.50</td><td>$0.90/km</td><td>Min 2.5 km</td></tr>
     <tr><td>🚶 Mensajero</td><td>$1.50</td><td>$1.00/km</td><td>Max 2 km</td></tr>
+    <tr><td>🚚 Mudanza Pick-Up</td><td>$50</td><td>Fijo</td><td>1 ton</td></tr>
+    <tr><td>🚛 Mudanza 350</td><td>$100</td><td>Fijo</td><td>3.5 ton</td></tr>
+    <tr><td>🚚 Mudanza 750</td><td>$180</td><td>Fijo</td><td>7 ton</td></tr>
 </table>
 <h4>Recargos por Horario</h4>
 <table>
@@ -588,7 +591,9 @@ ${role === 'admin' ? `
                 document.querySelectorAll('input[name="vehicle-type"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
                 e.target.closest('.payment-method-option').classList.add('selected');
                 const mensajeroForm = document.getElementById('mensajero-order-form');
+                const mudanzaForm = document.getElementById('mudanza-order-form');
                 if (mensajeroForm) mensajeroForm.style.display = e.target.value === 'mensajero' ? 'block' : 'none';
+                if (mudanzaForm) mudanzaForm.style.display = e.target.value === 'mudanza' ? 'block' : 'none';
             });
         });
 
@@ -716,10 +721,14 @@ ${role === 'admin' ? `
         }
         this.calculatedDistance = simulatedKm;
         if (distBadge) { distBadge.innerHTML = `Kilometros calculados: <strong class="text-cyan">${simulatedKm.toFixed(1)} km</strong>`; distBadge.style.display = 'block'; }
-        const maxDist = KILOMETER_RATE_CONFIG[vehicleType]?.maxDistance;
-        if (maxDist && simulatedKm > maxDist) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Distancia maxima para ${vehicleType === 'mensajero' ? 'mensajero' : vehicleType} es ${maxDist} km. Tu ruta es ${simulatedKm.toFixed(1)} km.</p></div>`; return; }
-        this.foundConductors = await API.get(`/api/conductors/available?distance=${simulatedKm}&vehicleType=${vehicleType}`);
-        if (this.foundConductors.length === 0) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${vehicleType === 'moto' ? 'moto' : vehicleType === 'camioneta' ? 'camioneta' : vehicleType === 'moto_delivery' ? 'moto delivery' : vehicleType === 'mensajero' ? 'mensajero' : 'carro'} disponibles</p></div>`; return; }
+        let searchType = vehicleType;
+        if (vehicleType === 'mudanza') {
+            searchType = document.getElementById('mudanza-subtype')?.value || 'mudanza_pickup';
+        }
+        const maxDist = KILOMETER_RATE_CONFIG[searchType]?.maxDistance;
+        if (maxDist && simulatedKm > maxDist) { listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Distancia maxima para ${searchType} es ${maxDist} km. Tu ruta es ${simulatedKm.toFixed(1)} km.</p></div>`; return; }
+        this.foundConductors = await API.get(`/api/conductors/available?distance=${simulatedKm}&vehicleType=${searchType}`);
+        if (this.foundConductors.length === 0) { const typeNames = { carro: 'carro', camioneta: 'camioneta', moto: 'moto', moto_delivery: 'moto delivery', mensajero: 'mensajero', mudanza_pickup: 'pick-up', mudanza_350: 'camion 350', mudanza_750: 'camion 750' }; listDiv.innerHTML = `<div class="p-4 bg-gray rounded text-center"><p class="text-red font-bold">Sin conductores de ${typeNames[searchType] || searchType} disponibles</p></div>`; return; }
         let html = '';
         const fareLabels = { normal: '', pico: ' (HP +25%)', noche: ' (Noche +20%)' };
         const fareTag = fareLabels[this.foundConductors[0]?.farePeriod] || '';
@@ -731,7 +740,7 @@ ${role === 'admin' ? `
             const hasRKM = this.session.balance >= c.calculatedPrice;
             const rs = hasRKM ? '<span class="text-emerald text-xs font-bold">✓ Saldo suficiente</span>' : '<span class="text-red text-xs font-bold">✗ Saldo insuficiente</span>';
             const stars = this.renderStarsSmall(c.avgRating, c.ratingCount);
-            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵', mensajero: '🚶' };
+            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵', mensajero: '🚶', mudanza_pickup: '🛻', mudanza_350: '🚛', mudanza_750: '🚚' };
             const vIcon = vIcons[c.vehicle?.type] || '🚗';
             html += `<div class="glass-card mb-3 border-l-purple p-4 flex justify-between items-center gap-4 flex-wrap">
                 <div class="flex-grow min-w-[200px]"><div class="flex items-center gap-2 mb-1"><h4 class="font-bold text-md text-purple">${c.name}</h4><span class="badge text-emerald bg-purple-dark text-xs">Cel: ${c.phone}</span></div><div class="mt-1 mb-1">${stars}</div><p class="text-sm font-bold text-cyan mt-1">${vIcon} ${c.vehicle.brand} ${c.vehicle.model}</p><p class="text-xs text-gray font-bold">👥 ${c.vehicle.passengers} pax | 💼 ${c.vehicle.suitcases} maletas</p><span class="badge text-cyan mt-1 text-xs">${ml}</span>${paymentMethod === 'rkm' ? `<div class="mt-1">${rs}</div>` : ''}</div>
@@ -757,6 +766,11 @@ ${role === 'admin' ? `
             const description = document.getElementById('mensajero-description')?.value || '';
             if (!receiverName || !receiverPhone) { this.showToast('Ingresa datos del destinatario.', 'error'); return; }
             orderDetails = { serviceType, senderName, senderPhone, receiverName, receiverPhone, description };
+        }
+        if (vehicleType === 'mudanza') {
+            const subtype = document.getElementById('mudanza-subtype')?.value || 'mudanza_pickup';
+            const description = document.getElementById('mudanza-description')?.value || '';
+            orderDetails = { subtype, description, senderName: this.session.name, senderPhone: this.session.phone };
         }
         await API.post('/api/trips', { clientId: this.session.id, clientName: this.session.name, clientPhone: this.session.phone, originAddress: origin, destinationAddress: dest, distance: this.calculatedDistance, conductorId, price, paymentMethod, orderDetails });
         this.showToast('Solicitud enviada al Conductor!', 'success');
@@ -1222,7 +1236,7 @@ ${role === 'admin' ? `
         const usersTable = document.getElementById('admin-users-list');
         let html = '<table class="table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Vehiculo</th><th>Billetera</th><th>2FA</th><th>Rating</th></tr></thead><tbody>';
         users.forEach(u => {
-            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵', mensajero: '🚶' };
+            const vIcons = { carro: '🚗', camioneta: '🚙', moto: '🏍️', moto_delivery: '🛵', mensajero: '🚶', mudanza_pickup: '🛻', mudanza_350: '🚛', mudanza_750: '🚚' };
             const vt = u.role === 'conductor' ? `${vIcons[u.vehicle?.type] || '🚗'} ${u.vehicle?.brand} ${u.vehicle?.model}` : '-';
             const avg = u.ratings?.length > 0 ? (u.ratings.reduce((a, b) => a + b, 0) / u.ratings.length).toFixed(1) : '-';
             const tfa = u.twoFactorEnabled ? '<span class="badge text-emerald">ON</span>' : '<span class="badge text-gray">OFF</span>';

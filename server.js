@@ -169,7 +169,10 @@ const KILOMETER_RATE = {
     camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 },
     moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 },
     moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 },
-    mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 }
+    mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.5, maxDistance: 2.0 },
+    mudanza_pickup: { base: 50, perKm: 0, flatRate: true },
+    mudanza_350: { base: 100, perKm: 0, flatRate: true },
+    mudanza_750: { base: 180, perKm: 0, flatRate: true }
 };
 
 // === AUTH ===
@@ -330,6 +333,7 @@ app.get('/api/conductors/available', async (req, res) => {
     const fareInfo = getFarePeriod();
     const conductors = rows.filter(c => {
         const v = typeof c.vehicle === 'string' ? JSON.parse(c.vehicle || '{}') : (c.vehicle || {});
+        if (vehicleType === 'mudanza') return v.type && v.type.startsWith('mudanza_');
         return v.type === vehicleType;
     }).map(c => {
         const cu = parseUser(c);
@@ -342,8 +346,12 @@ app.get('/api/conductors/available', async (req, res) => {
             price = parseFloat(fixedTariffs.defaultPrice) || 35.00;
         } else {
             if (rates.maxDistance && distance > rates.maxDistance) return null;
-            price = rates.base;
-            if (distance > rates.minDistance) price += (distance - rates.minDistance) * rates.perKm;
+            if (rates.flatRate) {
+                price = rates.base;
+            } else {
+                price = rates.base;
+                if (distance > rates.minDistance) price += (distance - rates.minDistance) * rates.perKm;
+            }
         }
         price = parseFloat((price * fareInfo.multiplier).toFixed(2));
         const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
