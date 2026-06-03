@@ -1,348 +1,109 @@
-# TuRides - Log de Cambios y Estado del Proyecto
+# Bitácora de Desarrollo - TuRides
 
-## Estado Actual
-- **Version**: 1.5.0
-- **Ultimo commit**: pendiente
-- **GitHub**: https://github.com/tecnicowin/turides
-- **Deploy**: https://turides.onrender.com
-- **Fecha**: 2026-06-02
-
-## Archivos Principales
-- `server.js` - Backend Express + Socket.io + better-sqlite3 + otpauth + qrcode
-- `app.js` - Frontend SPA (logica cliente, conductor, admin)
-- `index.html` - Todas las vistas HTML
-- `style.css` - Estilos completos (dark theme glassmorphism)
-- `package.json` - Dependencias (incluye otpauth, qrcode)
-- `render.yaml` - Config deploy Render
-- `turides.db` - Base de datos SQLite (generada en runtime)
-
-## Cuentas Demo
-> **IMPORTANTE**: Tras el setup inicial, la cuenta admin se crea desde la app (primer login).
-> Las cuentas demo se usan solo si NO se ha completado el setup.
+## Última sesión: 02/Junio/2026 11:30 PM - 03/Junio/2026 12:30 AM
 
 ---
 
-## Changelog Completo
+## ✅ Completado esta sesión
 
-### v1.5.0 - 2026-06-02
+### Tarifas por categorías de vehículo
+Se actualizaron las tarifas basadas en datos de mercado venezolano:
 
-#### Seguridad: Setup Inicial del Administrador
-- **Flujo de primer login**: Al abrir la app sin admin, muestra pantalla de configuración
-- Admin crea su cuenta con nombre, email, teléfono y contraseña segura
-- La contraseña se guarda con `passwordChanged = 1` para indicar setup completado
-- Endpoint `GET /api/setup/status` verifica si ya existe admin configurado
-- Endpoint `POST /api/setup/admin` crea el primer admin (solo funciona si no hay admin)
+| Categoría | Tarifa Base | Por Km | Dist. Mín. | Ícono |
+|-----------|------------|--------|------------|-------|
+| Moto (Transporte) | $0.80 | $0.40/km | 2.5 km | 🏍️ |
+| Moto Delivery | $1.80 | $0.55/km | 2.5 km | 🛵 |
+| Carro | $1.80 | $0.50/km | 2.5 km | 🚗 |
+| Camioneta (Confort) | $4.50 | $0.90/km | 2.5 km | 🚙 |
 
-#### Seguridad: Cambio de Contraseña
-- Panel de "Seguridad de mi Cuenta" en todos los roles (admin, cliente, conductor)
-- Cambio de contraseña con validación de contraseña actual
-- Endpoint `POST /api/change-password` con protección de重複
+**Archivos modificados:**
+- `server.js`: Línea ~38-43 — `KILOMETER_RATE` actualizado con 4 categorías
+- `app.js`: Línea ~1 — `KILOMETER_RATE_CONFIG` actualizado con 4 categorías
+- `app.js`: Línea ~1196 — Icono del admin table usa `vIcons` con 4 tipos
+- `index.html`: Radio buttons en registro y búsqueda con 4 opciones en grid 2x2
+- `app.js`: Texto de ayuda actualizado con 4 categorías
 
-#### Seguridad: Autenticación 2FA (TOTP)
-- Integración con **otpauth** + **qrcode** para generar códigos TOTP
-- Compatible con **Authy**, **Google Authenticator**, **Microsoft Authenticator**
-- Flujo completo:
-  1. Usuario solicita activar 2FA → se genera secreto + QR code
-  2. Escanea QR con app de autenticación
-  3. Ingresa código de 6 dígitos para verificar
-  4. 2FA se activa en la cuenta
-- Login modificado: si 2FA activo, pide código antes de completar login
-- Endpoint `POST /api/2fa/setup` genera secreto + QR
-- Endpoint `POST /api/2fa/verify-and-enable` activa 2FA tras verificación
-- Endpoint `POST /api/2fa/disable` desactiva 2FA (requiere contraseña)
-- Endpoint `POST /api/login/2fa-verify` verifica código en login
+### Logo de TuRides
+Se agregó imagen `images/logo.png` en 3 ubicaciones:
 
-#### Admin: Configuración Bancaria
-- Panel "Configuración Bancaria y Seguridad" en admin dashboard
-- Configurar datos bancarios para recibir recargas de clientes:
-  - Banco (21 opciones venezolanas)
-  - Número de cuenta
-  - Titular
-  - Tipo/Número de documento
-  - Teléfono de contacto
-- Estos datos se muestran a los clientes al solicitar recarga
+**Archivos modificados:**
+- `index.html`: Navbar (32x32), Login (120x120 con sombra púrpura), Setup (120x120 con sombra púrpura)
+- `style.css`: Estilos `.nav-logo`, `.brand-logo-container`, `.brand-logo`
 
-#### Admin: Gestión de Retiros
-- Panel de soporte con visualización de retiros de conductores
-- Aprobar/rechazar solicitudes de retiro
-- Al rechazar, se devuelve el saldo al conductor
-- Notificaciones en tiempo real vía Socket.io
+**Imagen:** `D:\TuRides\images\logo.png` (674 KB)
+**Copia fuente:** `D:\TuRides\images\96c06f71.png`
 
-#### Real-time Balance
-- Balance visible en navbar para clientes y conductores
-- Actualización en tiempo real vía Socket.io `user:updated`
-- Saldo en $ y Bs con tasa BCV actual
-
-### v1.4.0 - 2026-06-02
-
-#### Ajuste: Estructura de Costos Competitiva
-- **Moto**: Base $0.80 + $0.20/km (antes $2.00 + $0.45/km)
-- **Carro**: Base $1.80 + $0.50/km (antes $4.00 + $0.95/km)
-- **Hora Pico**: +25% unicamente en horario vespertino 5pm-8pm (antes era +30% en 7-9am y 5-7pm)
-- **Noche**: +20% de 10pm a 5am (sin cambio)
-- **Diurno/Normal**: Sin recargo (sin cambio)
-- Eliminado periodo "diurno" como separador, ahora solo normal/pico/noche
-- Tarifas dentro del rango competitivo del mercado Venezolano
-
-### v1.3.0 - 2026-06-01
-
-#### Fix: Panel de Soporte Admin (commit b695529)
-- `Promise.all` fallaba completamente si cualquiera de las 6 llamadas API fallaba
-- Agregado `.catch(() => [])` individual a `/api/wallet/recharges` y `/api/wallet/withdrawals`
-- Agregado try/catch general en `renderAdminDashboard`
-- Agregado try/catch en `renderAdminSupport`
-- Resultado: el dashboard admin ahora se renderiza aunque una API falle
-
-#### Fix: Boton Cancelar y Logout (commit ce9cf5e)
-- **Bug critico**: `stopPendingTimer()` era llamada 4 veces pero NUNCA fue definida en el rewrite del app.js
-- Esto causaba TypeError que rompia `cancelTrip()` y `logout()`
-- Solucion: Agregada la funcion `stopPendingTimer()` completa
-- `cancelTrip()` ahora es `async` y hace `await` al API call antes de refrescar la vista
-
-#### Fix: Sintaxis JS que impedia login (commit 6629663)
-- Faltaban comillas de cierre en dos objetos `fareLabels` en lineas 343 y 427
-- `' (Noche +20%)` -> `' (Noche +20%)'`
-- Esto causaba que el JS entero no cargara, impidiendo TODO: login, logout, cancelar, aceptar viajes
-
-### v1.2.0 - 2026-06-01
-
-#### Feature: Tarifas Dinamicas por Horario
-- Hora Pico (7-9am, 5-7pm): +30% multiplicador
-- Noche (10pm-5am): +20% multiplicador
-- Diurna/Normal: sin recargo
-- Indicador visual en navbar y busqueda de conductores
-- Label "Tarifa Normal/Diurna/Hora Pico/Noche" en header de busqueda
-
-#### Feature: Precios en Bs (Bolivares)
-- Todos los montos muestran USD + Bs (tasa BCV)
-- Tasa BCV guardada en tabla `config` de SQLite
-- Admin actualiza diariamente desde panel
-- `toBs(usd)` calcula conversion en toda la app
-
-#### Feature: Recarga de Billetera (Cliente)
-- Seccion "Configuracion & Billetera" en dashboard cliente
-- Muestra datos Pago Movil de TuRides para transferir
-- Cliente envia solicitud: monto, banco, referencia, telefono
-- Solicitud queda en tabla `recharges` con status "pendiente"
-- Admin aprueba/rechaza desde panel de soporte
-- Al aprobarse, saldo se acredita automaticamente
-
-#### Feature: Retiro de Billetera (Conductor)
-- Vista de billetera con saldo disponible en $ y Bs
-- Muestra cuenta bancaria registrada
-- Boton para solicitar retiro a cuenta bancaria
-- Solicitud en tabla `withdrawals` con status "pendiente"
-- Admin aprueba/rechaza desde panel de soporte
-- Si se rechaza, el saldo se devuelve al conductor
-
-#### Feature: Panel de Soporte Admin
-- Control de recargas de clientes (aprobar/rechazar)
-- Control de retiros de conductores (aprobar/rechazar)
-- Badge con cantidad de pendientes
-- Tablas con historial completo
-
-#### Feature: Tasa BCV Admin
-- Input para actualizar tasa BCV (Bs por $1 USD)
-- Se aplica a todas las transacciones de la plataforma
-- Ultima actualizacion visible
-
-#### Fix: Tarifas Moto Corregidas
-- minDistance: 2.5km (antes 2.0km)
-- perKm: $0.45 (antes $0.50)
-- Base: $2.00 (sin cambio)
-- Ahora consistente con tabla de Tarifas.txt
-
-#### DB Changes
-- Nuevas tablas: `recharges`, `withdrawals`
-- Nueva columna `bankInfo` en tabla `users`
-- Nuevas columnas en `trips`: `priceBs`, `fareMultiplier`, `farePeriod`
-- Nueva columna en `transactions`: `amountBs`
-- Migraciones automaticas con ALTER TABLE + try/catch
-
-### v1.1.0 - 2026-05-31
-
-#### Fix: Botones de seleccion no se resaltaban
-- Botones de Moto, Pago Movil y tipo de vehiculo no mostraban estado "selected"
-- Agregados event listeners para togglear clase `selected` en radio buttons
-
-#### Fix: SQLite para Render
-- Migrado de db.json (ephemeral) a better-sqlite3 (persiste en memoria)
-- WAL mode habilitado
-- Datos seed con 9 usuarios (1 admin, 2 clientes, 6 conductores)
-- Tabla `config` con datos de cuenta TuRides
-
-### v1.0.0 - 2026-05-30
-
-#### Feature: App Base TuRides
-- Login/Register para cliente, conductor, admin
-- Busqueda de conductores por tipo (carro/moto)
-- Sistema de contratacion con estados
-- Pago por RKM wallet o Pago Movil
-- Calificacion bidireccional estrellas 1-5
-- Dashboard admin con estadisticas
-- Socket.io para sync en tiempo real
-- Conductor polling cada 3s como fallback
-- CSS dark theme glassmorphism mobile-responsive
+### Commits realizados
+1. `ec5da3e` — Add camioneta and moto_delivery categories with market-based fares
+2. `b715156` — Add TuRides logo to navbar, login, and setup pages
+3. `37f87e4` — Update logo image
 
 ---
 
-## Estructura de Base de Datos
+## 📋 Pendientes para próxima sesión
 
-### Tabla `users`
-```
-id TEXT PK, name TEXT, phone TEXT, email TEXT UNIQUE, password TEXT,
-role TEXT, available INTEGER, vehicle TEXT, tariffMode TEXT,
-fixedTariffs TEXT, balance REAL, ratings TEXT, bankInfo TEXT
-```
+### Funcionalidades a revisar
+- [ ] Verificar flujo completo: Admin setup → login → 2FA → cliente busca viaje (4 tipos) → conductor acepta → pago RKM → calificación
+- [ ] Verificar que los filtros de búsqueda por tipo de vehículo funcionan correctamente
+- [ ] Probar que el cálculo de tarifas usa las nuevas tasas
+- [ ] Verificar que los conductores pueden seleccionar Camioneta o Moto Delivery al registrarse
+- [ ] Test de ayuda/guía con las nuevas categorías
 
-### Tabla `trips`
-```
-id TEXT PK, clientId TEXT, clientName TEXT, clientPhone TEXT,
-originAddress TEXT, destinationAddress TEXT, distance REAL,
-conductorId TEXT, conductorName TEXT, conductorPhone TEXT, conductorVehicle TEXT,
-price REAL, priceBs REAL, paymentMethod TEXT, status TEXT,
-paymentStatus TEXT, clientRating INTEGER, conductorRating INTEGER,
-clientRatingAt TEXT, conductorRatingAt TEXT, createdAt TEXT,
-completedAt TEXT, paymentVerifiedAt TEXT, fareMultiplier REAL, farePeriod TEXT
-```
-
-### Tabla `transactions`
-```
-id TEXT PK, tripId TEXT, clientId TEXT, conductorId TEXT,
-amount REAL, amountBs REAL, method TEXT, status TEXT,
-reference TEXT, phone TEXT, bankCode TEXT, createdAt TEXT
-```
-
-### Tabla `recharges`
-```
-id TEXT PK, userId TEXT, userName TEXT, amount REAL, amountBs REAL,
-phone TEXT, bankCode TEXT, reference TEXT, status TEXT,
-adminNote TEXT, createdAt TEXT, reviewedAt TEXT
-```
-
-### Tabla `withdrawals`
-```
-id TEXT PK, conductorId TEXT, conductorName TEXT, amount REAL, amountBs REAL,
-bankInfo TEXT, status TEXT, adminNote TEXT, createdAt TEXT, reviewedAt TEXT
-```
-
-### Tabla `config`
-```
-key TEXT PK, value TEXT
-```
-Keys: bankName, accountNumber, accountType, documentType, documentNumber,
-phone, holderName, bcvRate, bcvLastUpdate
-
----
-
-## Tarifas Configuradas (v1.4.0)
-
-| Parametro | Moto | Carro |
-|-----------|------|-------|
-| Base fija | $0.80 | $1.80 |
-| Por km | $0.20 | $0.50 |
-| Minimo (0-2.5km) | $0.80 | $1.80 |
-
-**Multiplicadores por horario**:
-- Normal: x1.0 (sin recargo)
-- Hora Pico Vespertina (5pm-8pm): +25% (x1.25)
-- Noche (10pm-5am): +20% (x1.20)
-
-### Ejemplos de precios
-| Distancia | Moto Normal | Moto Pico | Carro Normal | Carro Pico |
-|-----------|-------------|-----------|--------------|------------|
-| 2.5 km | $0.80 | $1.00 | $1.80 | $2.25 |
-| 5 km | $1.30 | $1.63 | $3.05 | $3.81 |
-| 10 km | $2.30 | $2.88 | $5.55 | $6.94 |
-| 15 km | $3.30 | $4.13 | $8.05 | $10.06 |
-
----
-
-## Endpoints API
-
-### Auth
-- POST /api/login
-- POST /api/register
-
-### Users
-- GET /api/users
-- GET /api/users/:id
-- PUT /api/users/:id
-
-### Conductors
-- GET /api/conductors/available?distance=&vehicleType=
-
-### Trips
-- GET /api/trips
-- POST /api/trips
-- PUT /api/trips/:id/status
-- PUT /api/trips/:id/rating
-
-### Config
-- GET /api/config
-- PUT /api/config
-- GET /api/rkm-config
-- GET /api/fare-info
-
-### Payments
-- POST /api/payments/rkm
-- POST /api/payments/pago_movil
-- POST /api/rkm/recharge (instant - old flow)
-
-### Wallet (nuevo)
-- POST /api/wallet/recharge (solicitud con admin approval)
-- GET /api/wallet/recharges
-- PUT /api/wallet/recharges/:id
-- POST /api/wallet/withdraw
-- GET /api/wallet/withdrawals
-- PUT /api/wallet/withdrawals/:id
-
-### Transactions
-- GET /api/transactions
-
-### Socket.io Events
-- trip:created, trip:new_request, trip:status_changed, trip:rated
-- payment:completed, user:updated, user:created
-- config:updated, recharge:created, recharge:approved, recharge:updated
-- withdrawal:created, withdrawal:approved, withdrawal:rejected
-
----
-
-## Pendientes / TODO
-
-### Funcionalidad
-- [ ] Integrar mapa real (Google Maps / Mapbox) para calcular distancia real
-- [ ] Notificaciones push para moviles
-- [ ] Historial detallado de viaje completado
-- [ ] Funcion "rebook" rapido para clientes
-- [ ] Chat entre cliente y conductor
-- [ ] Modo oscuro / claro toggle
-- [ ] Multi-idioma (ES/EN)
-
-### Admin
-- [ ] Admin puede deshabilitar/conductores
-- [ ] Graficos de ventas diarias/semanales
-- [ ] Exportar datos a CSV/Excel
-- [ ] Notificaciones al admin cuando hay solicitudes pendientes
-
-### Pagos
-- [ ] Validar referencias de Pago Movil automaticamente
-- [ ] Integrar pasarela de pago real
-- [ ] Historial de transacciones con filtros por fecha
-- [ ] Comprobante de pago descargable
-
-### Conductor
-- [ ] Historial de ganancias diarias/semanales
-- [ ] Calculo automatico de kilometros con GPS
-- [ ] Modo "en ruta" con ubicacion compartida
-
-### Cliente
-- [ ] Guardar direcciones frecuentes
-- [ ] Calcular ruta real con Google Maps
-- [ ] Compartir ubicacion del conductor en tiempo real
+### Mejoras pendientes
+- [ ] Agregar "Camioneta de Carga" (si aplica para TuRides)
+- [ ] Actualizar tabla comparativa de tarifas en la guía de ayuda con las 4 categorías
+- [ ] Considerar agregar descripción de capacidad por tipo de vehículo en la UI
+- [ ] Revisar si hay otros archivos que mencionen "moto" solamente y necesiten actualizar a los 4 tipos
 
 ### Deploy
-- [ ] Upgrade Render a plan de pago para evitar cold start
-- [ ] Configurar dominio personalizado
-- [ ] SSL/HTTPS automatico
-- [ ] Backup automatico de base de datos
+- Push automático a GitHub → Render deploy
+- Verificar que Render está sirviendo la nueva imagen correctamente
+- Verificar que `/images/logo.png` carga en producción
+
+---
+
+## 📊 Resumen del proyecto
+
+- **Repositorio:** https://github.com/tecnicowin/turides
+- **Deploy:** https://turides.onrender.com
+- **Base de datos:** PostgreSQL (Neon)
+- **Stack:** Express + Socket.io + PostgreSQL (pg) + SPA vanilla JS
+
+### Estructura de archivos clave
+```
+D:\TuRides\
+├── server.js          # Backend principal (API, Socket.io, tarifas)
+├── app.js             # Frontend SPA (UI, wallet, admin, ayuda)
+├── index.html         # Vistas HTML (setup, login, admin, registro)
+├── style.css          # Estilos (1500+ líneas, incluye print)
+├── db.js              # Wrapper PostgreSQL (Pool + helpers)
+├── images/
+│   ├── logo.png       # Logo principal (674 KB)
+│   └── 96c06f71.png   # Copia fuente del logo
+├── package.json
+├── render.yaml
+├── .gitignore
+└── BITACORA.md        # Este archivo
+```
+
+### Variables de entorno en Render
+- `DATABASE_URL` = Neon PostgreSQL connection string
+- `NODE_ENV` = production
+
+---
+
+## 🔧 Comandos útiles
+
+```bash
+# Ver estado de git
+git status
+
+# Commit y push
+git add .; git commit -m "mensaje"; git push
+
+# Ver logs de Render
+# Ir a: https://dashboard.render.com → TuRides → Logs
+
+# Conectar a PostgreSQL directamente (si es necesario)
+# Usar el connection string de Neon en DB Browser o pgAdmin
+```
