@@ -174,8 +174,8 @@
                     </div>
 
                     <div id="register-card" class="glass-card auth-card" style="display: none;">
-                        <h2 class="text-2xl font-bold mb-2">Registro & Postulación</h2>
-                        <p class="text-gray mb-4 text-sm">Completa tu información para unirte a TuRides.</p>
+                        <h2 class="text-2xl font-bold mb-2">Registro & Postulacion</h2>
+                        <p class="text-gray mb-4 text-sm">Completa tu informacion para unirte a TuRides.</p>
                         <form id="register-form">
                             <div class="form-group">
                                 <label for="reg-name">Nombre y Apellido</label>
@@ -186,56 +186,109 @@
                                 <input type="tel" id="reg-phone" required placeholder="Ej. 0412-5556677" class="input">
                             </div>
                             <div class="form-group">
-                                <label for="reg-email">Correo Electrónico</label>
+                                <label for="reg-email">Correo Electronico</label>
                                 <input type="email" id="reg-email" required placeholder="ejemplo@turides.com" class="input">
                             </div>
                             <div class="form-group">
-                                <label for="reg-password">Contraseña</label>
-                                <input type="password" id="reg-password" required placeholder="Mínimo 6 caracteres" class="input">
+                                <label for="reg-password">Contrasena</label>
+                                <input type="password" id="reg-password" required placeholder="Minimo 6 caracteres" class="input">
                             </div>
                             <div class="form-group">
-                                <label for="reg-role">Rol en la aplicación</label>
-                                <select id="reg-role" class="input">
-                                    <option value="cliente">Cliente (Solicitar servicios)</option>
-                                    <option value="conductor">Conductor Privado (Postulación)</option>
-                                </select>
+                                <label>Rol en la aplicacion</label>
+                                <div class="payment-methods-grid" style="grid-template-columns: repeat(3, 1fr);">
+                                    <label class="payment-method-option selected" data-method="cliente">
+                                        <input type="radio" name="reg-role" value="cliente" checked>
+                                        <span class="pm-icon">👤</span>
+                                        <span class="pm-name">Cliente</span>
+                                    </label>
+                                    <label class="payment-method-option" data-method="mensajero">
+                                        <input type="radio" name="reg-role" value="mensajero">
+                                        <span class="pm-icon">🚶</span>
+                                        <span class="pm-name">Mensajero</span>
+                                    </label>
+                                    <label class="payment-method-option" data-method="conductor">
+                                        <input type="radio" name="reg-role" value="conductor">
+                                        <span class="pm-icon">🚗</span>
+                                        <span class="pm-name">Conductor</span>
+                                    </label>
+                                </div>
                             </div>
                             <div id="reg-conductor-block" style="display: none;" class="mt-4 border-t border-gray pt-4">
                                 <h3 class="text-sm font-bold text-purple uppercase mb-3">Ficha de Postulacion de Conductor</h3>
                                 <div class="form-group mb-3">
-                    <label>Tipo de Vehiculo</label>
-                    <div class="payment-methods-grid" style="grid-template-columns: repeat(3, 1fr);">
-                        <label class="payment-method-option selected" data-method="carro">
-                            <input type="radio" name="reg-vehicle-type" value="carro" checked>
-                            <span class="pm-icon">🚗</span>
-                            <span class="pm-name">Carro</span>
-                        </label>
-                        <label class="payment-method-option" data-method="camioneta">
-                            <input type="radio" name="reg-vehicle-type" value="camioneta">
-                            <span class="pm-icon">🚙</span>
-                            <span class="pm-name">Camioneta</span>
-                        </label>
-                        <label class="payment-method-option" data-method="moto">
-                            <input type="radio" name="reg-vehicle-type" value="moto">
-                            <span class="pm-icon">🏍️</span>
-                            <span class="pm-name">Moto</span>
-                        </label>
-                        <label class="payment-method-option" data-method="moto_delivery">
-                            <input type="radio" name="reg-vehicle-type" value="moto_delivery">
-                            <span class="pm-icon">🛵</span>
-                            <span class="pm-name">Moto Delivery</span>
-                        </label>
-                        <label class="payment-method-option" data-method="mensajero">
-                            <input type="radio" name="reg-vehicle-type" value="mensajero">
-                            <span class="pm-icon">🚶</span>
-                            <span class="pm-name">Mensajero</span>
-                        </label>
-                        <label class="payment-method-option" data-method="mudanza">
-                            <input type="radio" name="reg-vehicle-type" value="mudanza">
-                            <span class="pm-icon">🚚</span>
-                            <span class="pm-name">Mudanza</span>
-                        </label>
-                    </div>
+                                    <label>Tipo de Vehiculo</label>
+                                    <div class="payment-methods-grid" style="grid-template-columns: repeat(3, 1fr);">
+                                        <label class="payment-method-option selected" data-method="carro">
+                                            <input type="radio" name="reg-vehicle-type" value="carro" checked>
+                                            <span class="pm-icon">🚗</span>
+                                            <span class="pm-name">Carro</span>
+                                        </label>
+                                        <label class="payment-method-option" data-method="moto">
+                                            <input type="radio" name="reg-vehicle-type" value="moto">
+                                            <span class="pm-icon">🏍️</span>
+                                            <span class="pm-name">Moto</span>
+                                        </label>
+                                        <label class="payment-method-option" data-method="camion">
+                                            <input type="radio" name="reg-vehicle-type" value="camion">
+                                            <span class="pm-icon">🚚</span>
+                                            <span class="pm-name">Camion</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="reg-vehicle-details">
+                                    <div id="reg-carro-details">
+                                        <div class="grid grid-2 gap-3 mb-3">
+                                            <div class="form-group">
+                                                <label for="reg-passengers">Pasajeros</label>
+                                                <input type="number" id="reg-passengers" min="1" max="15" value="4" class="input">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="reg-suitcases">Maletas</label>
+                                                <input type="number" id="reg-suitcases" min="0" max="10" value="2" class="input">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="reg-moto-details" style="display: none;">
+                                        <div class="form-group mb-3">
+                                            <label>Tipo de Servicio</label>
+                                            <div class="payment-methods-grid" style="grid-template-columns: repeat(3, 1fr);">
+                                                <label class="payment-method-option selected" data-method="moto_viajes">
+                                                    <input type="radio" name="reg-moto-service" value="moto_viajes" checked>
+                                                    <span class="pm-icon">🏍️</span>
+                                                    <span class="pm-name">Viajes</span>
+                                                </label>
+                                                <label class="payment-method-option" data-method="moto_delivery">
+                                                    <input type="radio" name="reg-moto-service" value="moto_delivery">
+                                                    <span class="pm-icon">🛵</span>
+                                                    <span class="pm-name">Delivery</span>
+                                                </label>
+                                                <label class="payment-method-option" data-method="moto_ambas">
+                                                    <input type="radio" name="reg-moto-service" value="moto_ambas">
+                                                    <span class="pm-icon">🔄</span>
+                                                    <span class="pm-name">Ambas</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="reg-camion-details" style="display: none;">
+                                        <div class="grid grid-2 gap-3 mb-3">
+                                            <div class="form-group">
+                                                <label for="reg-camion-capacity">Capacidad (Toneladas)</label>
+                                                <select id="reg-camion-capacity" class="input">
+                                                    <option value="1">Pick-Up (1 Ton)</option>
+                                                    <option value="3.5">Camion 350 (3.5 Ton)</option>
+                                                    <option value="7">Camion 750 (7 Ton)</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="reg-camion-interior">Viajes al Interior</label>
+                                                <select id="reg-camion-interior" class="input">
+                                                    <option value="si">Si, acepto viajes al interior</option>
+                                                    <option value="no">No, solo urbano</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="grid grid-2 gap-3 mb-3">
                                     <div class="form-group">
@@ -247,21 +300,11 @@
                                         <input type="text" id="reg-model" placeholder="Ej. Corolla" class="input">
                                     </div>
                                 </div>
-                                <div class="grid grid-2 gap-3 mb-3">
-                                    <div class="form-group">
-                                        <label for="reg-passengers">Capacidad Pasajeros</label>
-                                        <input type="number" id="reg-passengers" min="1" max="15" value="4" class="input">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="reg-suitcases">Capacidad Maletas</label>
-                                        <input type="number" id="reg-suitcases" min="0" max="10" value="2" class="input">
-                                    </div>
-                                </div>
                             </div>
                             <button type="submit" class="btn btn-purple w-full mt-4">Completar Registro</button>
                         </form>
                         <p class="auth-switch mt-4 text-center text-sm">
-                            ¿Ya estás registrado? <a href="#" onclick="document.getElementById('register-card').style.display='none'; document.getElementById('login-card').style.display='block';" class="text-purple font-bold">Inicia Sesión</a>
+                            Ya estas registrado? <a href="#" onclick="document.getElementById('register-card').style.display='none'; document.getElementById('login-card').style.display='block';" class="text-purple font-bold">Inicia Sesion</a>
                         </p>
                     </div>
                 </div>

@@ -548,8 +548,29 @@ ${role === 'admin' ? `
             } catch(err) { this.showToast('Error de conexion.', 'error'); }
         });
 
-        document.getElementById('reg-role')?.addEventListener('change', (e) => {
-            document.getElementById('reg-conductor-block').style.display = e.target.value === 'conductor' ? 'block' : 'none';
+        document.querySelectorAll('input[name="reg-role"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                document.querySelectorAll('input[name="reg-role"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
+                e.target.closest('.payment-method-option').classList.add('selected');
+                document.getElementById('reg-conductor-block').style.display = e.target.value === 'conductor' ? 'block' : 'none';
+            });
+        });
+
+        document.querySelectorAll('input[name="reg-vehicle-type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                document.querySelectorAll('input[name="reg-vehicle-type"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
+                e.target.closest('.payment-method-option').classList.add('selected');
+                document.getElementById('reg-carro-details').style.display = e.target.value === 'carro' ? 'block' : 'none';
+                document.getElementById('reg-moto-details').style.display = (e.target.value === 'moto' || e.target.value === 'moto_delivery') ? 'block' : 'none';
+                document.getElementById('reg-camion-details').style.display = e.target.value === 'camion' ? 'block' : 'none';
+            });
+        });
+
+        document.querySelectorAll('input[name="reg-moto-service"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                document.querySelectorAll('input[name="reg-moto-service"]').forEach(r => r.closest('.payment-method-option').classList.remove('selected'));
+                e.target.closest('.payment-method-option').classList.add('selected');
+            });
         });
 
         document.getElementById('register-form')?.addEventListener('submit', async (e) => {
@@ -559,17 +580,31 @@ ${role === 'admin' ? `
                 phone: document.getElementById('reg-phone').value,
                 email: document.getElementById('reg-email').value,
                 password: document.getElementById('reg-password').value,
-                role: document.getElementById('reg-role').value
+                role: document.querySelector('input[name="reg-role"]:checked')?.value || 'cliente'
             };
             if (data.role === 'conductor') {
+                const vehicleType = document.querySelector('input[name="reg-vehicle-type"]:checked')?.value || 'carro';
                 data.vehicleData = {
-                    type: document.querySelector('input[name="reg-vehicle-type"]:checked')?.value || 'carro',
-                    brand: document.getElementById('reg-brand').value || 'Toyota',
-                    model: document.getElementById('reg-model').value || 'Corolla',
-                    passengers: document.getElementById('reg-passengers').value || 4,
-                    suitcases: document.getElementById('reg-suitcases').value || 2,
+                    type: vehicleType,
+                    brand: document.getElementById('reg-brand').value || '',
+                    model: document.getElementById('reg-model').value || '',
                     tariffMode: 'kilometros'
                 };
+                if (vehicleType === 'carro') {
+                    data.vehicleData.passengers = document.getElementById('reg-passengers').value || 4;
+                    data.vehicleData.suitcases = document.getElementById('reg-suitcases').value || 2;
+                } else if (vehicleType === 'moto' || vehicleType === 'moto_delivery') {
+                    data.vehicleData.motoService = document.querySelector('input[name="reg-moto-service"]:checked')?.value || 'moto_viajes';
+                    if (data.vehicleData.motoService === 'moto_ambas') {
+                        data.vehicleData.type = 'moto_ambas';
+                    }
+                } else if (vehicleType === 'camion') {
+                    data.vehicleData.capacity = document.getElementById('reg-camion-capacity')?.value || '1';
+                    data.vehicleData.interiorTrips = document.getElementById('reg-camion-interior')?.value || 'si';
+                    if (data.vehicleData.capacity === '1') data.vehicleData.type = 'camioneta';
+                    else if (data.vehicleData.capacity === '3.5') data.vehicleData.type = 'mudanza_350';
+                    else data.vehicleData.type = 'mudanza_750';
+                }
             }
             try {
                 const result = await API.post('/api/register', data);

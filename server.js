@@ -333,7 +333,9 @@ app.get('/api/conductors/available', async (req, res) => {
     const fareInfo = getFarePeriod();
     const conductors = rows.filter(c => {
         const v = typeof c.vehicle === 'string' ? JSON.parse(c.vehicle || '{}') : (c.vehicle || {});
-        if (vehicleType === 'mudanza') return v.type && v.type.startsWith('mudanza_');
+        if (vehicleType === 'mudanza') return v.type && (v.type.startsWith('mudanza_') || v.type === 'camioneta');
+        if (vehicleType === 'moto') return v.type === 'moto' || v.type === 'moto_delivery' || v.type === 'moto_ambas';
+        if (vehicleType === 'carro') return v.type === 'carro';
         return v.type === vehicleType;
     }).map(c => {
         const cu = parseUser(c);
