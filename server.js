@@ -617,6 +617,114 @@ app.get('/api/transactions', async (req, res) => {
     res.json(rows.map(r => mapRow(r, TXN_MAP)));
 });
 
+// === BACKUP & RESTORE ===
+app.get('/api/admin/backup', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const users = (await dbAll('SELECT * FROM users')).map(u => {
+            const m = mapRow(u, USER_MAP);
+            return { ...m, vehicle: m.vehicle ? JSON.parse(m.vehicle) : null, ratings: m.ratings ? JSON.parse(m.ratings) : [], bankInfo: m.bankInfo ? JSON.parse(m.bankInfo) : null };
+        });
+        const trips = (await dbAll('SELECT * FROM trips')).map(t => mapRow(t, TRIP_MAP));
+        const transactions = (await dbAll('SELECT * FROM transactions')).map(tx => mapRow(tx, TXN_MAP));
+        const config = (await dbAll('SELECT * FROM config'));
+        const configObj = {};
+        config.forEach(c => { configObj[c.key] = c.value; });
+        const recharges = (await dbAll('SELECT * FROM recharges')).map(r => mapRow(r, RECHARGE_MAP));
+        const withdrawals = (await dbAll('SELECT * FROM withdrawals')).map(w => mapRow(w, WITHDRAWAL_MAP));
+
+        const backup = {
+            version: '1.0',
+            createdAt: new Date().toISOString(),
+            data: { users, trips, transactions, config: configObj, recharges, withdrawals }
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="turides-backup-${new Date().toISOString().slice(0,10)}.json"`);
+        res.json(backup);
+    } catch (err) {
+        console.error('Backup error:', err);
+        res.status(500).json({ error: 'Error al crear backup' });
+    }
+});
+
+app.post('/api/admin/restore', requireAuth, requireAdmin, express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+        const backup = req.body;
+        if (!backup || !backup.data) return res.status(400).json({ error: 'Formato de backup inválido' });
+
+        const { users, trips, transactions, config, recharges, withdrawals } = backup.data;
+
+        const { getPool } = require('./db');
+        const pool = getPool();
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            if (users && users.length > 0) {
+                for (const u of users) {
+                    await client.query(`INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffmode, fixedtariffs, balance, bankinfo, ratings, twofactorsecret, twofactorenabled, passwordchanged)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (id) DO UPDATE SET
+                        name=$2, phone=$3, email=$4, password=$5, role=$6, available=$7, vehicle=$8, tariffmode=$9, fixedtariffs=$10, balance=$11, bankinfo=$12, ratings=$13, twofactorsecret=$14, twofactorenabled=$15, passwordchanged=$16`,
+                        [u.id, u.name, u.phone, u.email, u.password, u.role, u.available ? 1 : 0,
+                         u.vehicle ? JSON.stringify(u.vehicle) : null, u.tariffMode, u.fixedTariffs ? JSON.stringify(u.fixedTariffs) : null,
+                         u.balance || 0, u.bankInfo ? JSON.stringify(u.bankInfo) : null,
+                         JSON.stringify(u.ratings || []), u.twoFactorSecret, u.twoFactorEnabled ? 1 : 0, u.passwordChanged ? 1 : 0]);
+                }
+            }
+            if (config && Object.keys(config).length > 0) {
+                for (const [k, v] of Object.entries(config)) {
+                    await client.query('INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value=$2', [k, v]);
+                }
+            }
+            if (trips && trips.length > 0) {
+                for (const t of trips) {
+                    await client.query(`INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, paymentstatus, clientrating, conductorrating, clientratingat, conductorratingat, createdat, completedat, paymentverifiedat, faremultiplier, fareperiod)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) ON CONFLICT (id) DO NOTHING`,
+                        [t.id, t.clientId, t.clientName, t.clientPhone, t.originAddress, t.destinationAddress, t.distance,
+                         t.conductorId, t.conductorName, t.conductorPhone, t.conductorVehicle,
+                         t.price, t.priceBs, t.paymentMethod, t.status, t.paymentStatus,
+                         t.clientRating, t.conductorRating, t.clientRatingAt, t.conductorRatingAt,
+                         t.createdAt, t.completedAt, t.paymentVerifiedAt, t.fareMultiplier || 1.0, t.farePeriod || 'normal']);
+                }
+            }
+            if (transactions && transactions.length > 0) {
+                for (const tx of transactions) {
+                    await client.query(`INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, reference, phone, bankcode, createdat)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
+                        [tx.id, tx.tripId, tx.clientId, tx.conductorId, tx.amount, tx.amountBs, tx.method, tx.status, tx.reference, tx.phone, tx.bankCode, tx.createdAt]);
+                }
+            }
+            if (recharges && recharges.length > 0) {
+                for (const r of recharges) {
+                    await client.query(`INSERT INTO recharges (id, userid, username, amount, amountbs, phone, bankcode, reference, status, adminnote, createdat, reviewedat)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
+                        [r.id, r.userId, r.username, r.amount, r.amountBs, r.phone, r.bankCode, r.reference, r.status, r.adminNote, r.createdAt, r.reviewedAt]);
+                }
+            }
+            if (withdrawals && withdrawals.length > 0) {
+                for (const w of withdrawals) {
+                    await client.query(`INSERT INTO withdrawals (id, conductorid, conductorname, amount, amountbs, commission, netamount, bankinfo, status, adminnote, reference, createdat, reviewedat)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (id) DO NOTHING`,
+                        [w.id, w.conductorId, w.conductorName, w.amount, w.amountBs, w.commission || 0, w.netAmount || 0,
+                         w.bankInfo ? JSON.stringify(w.bankInfo) : null, w.status, w.adminNote, w.reference, w.createdAt, w.reviewedAt]);
+                }
+            }
+
+            await client.query('COMMIT');
+            res.json({ ok: true, message: 'Backup restaurado exitosamente', users: users?.length || 0, trips: trips?.length || 0 });
+        } catch (e) {
+            await client.query('ROLLBACK');
+            console.error('Restore error:', e);
+            res.status(500).json({ error: 'Error al restaurar: ' + e.message });
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        console.error('Restore error:', err);
+        res.status(500).json({ error: 'Error al restaurar backup' });
+    }
+});
+
 // === SOCKET.IO ===
 io.on('connection', (socket) => {
     console.log('Connected:', socket.id);

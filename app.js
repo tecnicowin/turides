@@ -1242,6 +1242,7 @@ ${role === 'admin' ? `
         this.renderAdminBankConfig(config);
 
         try { this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
+        try { this.renderAdminBackup(); } catch(e) { console.error('Backup panel error:', e); }
     },
 
     renderAdminSupport(recharges, withdrawals) {
@@ -1317,6 +1318,67 @@ ${role === 'admin' ? `
         html += `</div>`;
 
         container.innerHTML = html;
+    },
+
+    renderAdminBackup() {
+        const container = document.getElementById('admin-backup-panel');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="mb-4">
+                <h3 class="text-lg font-bold mb-3 text-cyan">💾 Backup y Restauración</h3>
+                <div class="grid grid-2 gap-2">
+                    <div class="glass-card p-4 text-center">
+                        <p class="text-sm mb-3">Exportar todos los datos (usuarios, viajes, transacciones, config) como archivo JSON.</p>
+                        <button onclick="App.adminBackup()" class="btn btn-purple w-full">📦 Descargar Backup</button>
+                    </div>
+                    <div class="glass-card p-4 text-center">
+                        <p class="text-sm mb-3">Restaurar datos desde un archivo JSON de backup anterior.</p>
+                        <input type="file" id="restore-file" accept=".json" style="display:none" onchange="App.adminRestoreFile(event)">
+                        <button onclick="document.getElementById('restore-file').click()" class="btn btn-cyan w-full">📥 Restaurar Backup</button>
+                    </div>
+                </div>
+            </div>`;
+    },
+
+    async adminBackup() {
+        try {
+            this.showToast('Generando backup...', 'info');
+            const res = await fetch('/api/admin/backup', { headers: { 'Authorization': 'Bearer ' + this.token } });
+            if (!res.ok) throw new Error('Error al crear backup');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `turides-backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('Backup descargado exitosamente.', 'success');
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    async adminRestoreFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (!confirm('⚠️ Esto REEMPLAZARÁ todos los datos actuales. ¿Estás seguro?')) return;
+        try {
+            this.showToast('Restaurando backup...', 'info');
+            const text = await file.text();
+            const backup = JSON.parse(text);
+            const res = await fetch('/api/admin/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.token },
+                body: text
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Error al restaurar');
+            this.showToast(`Restaurado: ${result.users} usuarios, ${result.trips} viajes.`, 'success');
+            this.renderAdminDashboard();
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+        event.target.value = '';
     },
 
     async adminReviewRecharge(id, status) {
