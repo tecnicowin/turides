@@ -16,13 +16,24 @@
 **Commits:**
 - `9cee818` — FIX: Remove DROP TABLE from initDB - data now persists across deploys
 - `c2ca899` — Add admin backup/restore system (JSON export/import)
+- `c09198e` — FIX: backup/restore auth - use x-user-id header instead of undefined middleware
+- `23d10a3` — Add backup reminder + Google Drive auto-upload
 
 ### Sistema de Backup/Restauración
 - **Endpoint GET `/api/admin/backup`**: Exporta todos los datos (users, trips, transactions, config, recharges, withdrawals) como archivo JSON descargable
 - **Endpoint POST `/api/admin/restore`**: Importa datos desde un archivo JSON con upsert (ON CONFLICT DO UPDATE/DO NOTHING)
-- **UI Admin**: Botones "Descargar Backup" y "Restaurar Backup" en el panel de administración
-- **Confirmación de seguridad**: Restauración requiere confirmación del admin antes de ejecutar
+- **Endpoint GET `/api/admin/backup/status`**: Trackea último backup y si necesita crear uno nuevo
+- **Endpoint POST `/api/admin/backup/track`**: Marca fecha del último backup
+- **Endpoint POST `/api/admin/backup/google-drive`**: Sube backup automáticamente a Google Drive
+- **UI Admin**: 3 botones — Descargar, Subir a Google Drive, Restaurar
+- **Recordatorio**: Banner amarillo cada 7 días sin backup
+- **Seguridad**: Solo admin puede usar estos endpoints
 - **Transacción SQL**: Restore usa BEGIN/COMMIT/ROLLBACK para garantizar integridad
+
+### Configuración Google Drive (pendiente)
+- Variable de entorno `GOOGLE_DRIVE_CREDENTIALS`: JSON de Service Account
+- Variable de entorno `GOOGLE_DRIVE_FOLDER_ID` (opcional): ID de carpeta destino
+- Ver instrucciones en la sección de setup de Google Drive
 
 ---
 
