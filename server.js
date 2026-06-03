@@ -202,7 +202,7 @@ app.post('/api/register', async (req, res) => {
     const { name, phone, email, password, role, vehicleData } = req.body;
     const exists = await dbGet('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (exists) return res.status(400).json({ error: 'El correo ya esta registrado' });
-    const vehicle = role === 'conductor' && vehicleData ? JSON.stringify({ type: vehicleData.type || 'carro', brand: vehicleData.brand, model: vehicleData.model, passengers: parseInt(vehicleData.passengers) || 4, suitcases: parseInt(vehicleData.suitcases) || 2 }) : null;
+    const vehicle = role === 'conductor' && vehicleData ? JSON.stringify({ type: vehicleData.type || 'carro', brand: vehicleData.brand, model: vehicleData.model, passengers: parseInt(vehicleData.passengers) || 4, suitcases: parseInt(vehicleData.suitcases) || 2 }) : role === 'mensajero' ? JSON.stringify({ type: 'mensajero', brand: 'N/A', model: 'A pie' }) : null;
     const tariffMode = role === 'conductor' ? (vehicleData?.tariffMode || 'kilometros') : null;
     const fixedTariffs = role === 'conductor' ? JSON.stringify({ defaultPrice: 20.00 }) : null;
     await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffmode, fixedtariffs, balance, ratings, bankinfo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12)',
