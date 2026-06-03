@@ -42,6 +42,7 @@
                 <span id="nav-user-name" class="user-name">Usuario</span>
                 <span id="nav-user-role" class="user-role">Rol</span>
             </div>
+            <button onclick="App.showView('help')" class="btn btn-help" title="Guia Rapida">❓ Ayuda</button>
             <button onclick="App.logout()" class="btn btn-logout" id="logout-btn">Salir</button>
         </div>
     </nav>
@@ -408,6 +409,22 @@
             <div class="glass-card mt-4">
                 <h2 class="text-xl font-bold mb-4">🏦 Configuración Bancaria y Seguridad</h2>
                 <div id="admin-bank-config"></div>
+            </div>
+        </section>
+
+        <!-- HELP / GUIA RAPIDA -->
+        <section id="view-help" class="app-view" style="display: none;">
+            <div class="help-container">
+                <div class="glass-card">
+                    <div class="help-header">
+                        <h2 class="text-xl font-bold">Guia Rapida de TuRides</h2>
+                        <div class="help-actions">
+                            <button onclick="App.printHelp()" class="btn btn-sm">🖨️ Imprimir / PDF</button>
+                            <button onclick="App.showView(App.session ? App.session.role : 'login')" class="btn btn-sm btn-secondary">← Volver</button>
+                        </div>
+                    </div>
+                    <div id="help-content" class="help-body"></div>
+                </div>
             </div>
         </section>
 

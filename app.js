@@ -263,6 +263,7 @@ const App = {
         const target = document.getElementById(`view-${viewName}`);
         if (target) target.style.display = 'block';
         this.renderNavbar();
+        if (viewName === 'help') { this.renderHelp(); return; }
         this.updateViewContent();
     },
 
@@ -311,6 +312,169 @@ const App = {
             case 'conductor': await this.renderConductorDashboard(); break;
             case 'admin': await this.renderAdminDashboard(); break;
         }
+    },
+
+    renderHelp() {
+        const c = document.getElementById('help-content');
+        if (!c) return;
+        const role = this.session ? this.session.role : 'all';
+        c.innerHTML = `
+<style>
+    .help-body h3 { color: #10b981; margin: 20px 0 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; }
+    .help-body h4 { color: #60a5fa; margin: 12px 0 4px; }
+    .help-body ul { margin: 4px 0 12px 20px; }
+    .help-body li { margin: 3px 0; line-height: 1.5; }
+    .help-body table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; }
+    .help-body th, .help-body td { padding: 6px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 0.85rem; }
+    .help-body th { color: #60a5fa; font-weight: 600; }
+    .help-body .help-tip { background: rgba(16,185,129,0.1); border-left: 3px solid #10b981; padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 0.85rem; }
+    .help-body .help-warn { background: rgba(251,191,36,0.1); border-left: 3px solid #f59e0b; padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 0.85rem; }
+</style>
+
+<h3>1. Bienvenido a TuRides</h3>
+<p>TuRides es una plataforma de transporte privado de pasajeros en Venezuela. Puedes solicitar viajes en <strong>Carro</strong> o <strong>Moto</strong>, pagar con billetera digital (RKM) o Pago Movil, y calificar a tu conductor o cliente.</p>
+
+<h3>2. Cuentas y Acceso</h3>
+<h4>Registro</h4>
+<ul>
+    <li>Crea tu cuenta con nombre, telefono, email y contrasena</li>
+    <li>Selecciona tu rol: <strong>Cliente</strong> o <strong>Conductor</strong></li>
+    <li>Los conductores deben registrar los datos de su vehiculo</li>
+</ul>
+<h4>Inicio de Sesion</h4>
+<ul>
+    <li>Ingresa con tu email y contrasena</li>
+    <li>Si tienes <strong>2FA activado</strong>, se pedira el codigo de tu app de autenticacion (Google Authenticator o Authy)</li>
+</ul>
+<div class="help-tip">💡 Puedes cambiar tu contrasena desde cualquier pantalla en la seccion de Seguridad.</div>
+
+<h3>3. Tarifas y Precios</h3>
+<table>
+    <tr><th>Vehiculo</th><th>Tarifa Base</th><th>Por Kilometro</th><th>Distancia Minima</th></tr>
+    <tr><td>🚗 Carro</td><td>$1.80</td><td>$0.50/km</td><td>2.5 km</td></tr>
+    <tr><td>🏍️ Moto</td><td>$0.80</td><td>$0.20/km</td><td>2.5 km</td></tr>
+</table>
+<h4>Recargos por Horario</h4>
+<table>
+    <tr><th>Periodo</th><th>Horario</th><th>Recargo</th></tr>
+    <tr><td>Normal</td><td>5:00 AM - 4:59 PM</td><td>Sin recargo</td></tr>
+    <tr><td>Hora Pico</td><td>5:00 PM - 7:59 PM</td><td>+25%</td></tr>
+    <tr><td>Noche</td><td>10:00 PM - 4:59 AM</td><td>+20%</td></tr>
+</table>
+<div class="help-tip">💡 El precio se calcula automaticamente: Base + (Km excedentes x Tarifa/Km) x Multiplicador del horario.</div>
+
+<h3>4. Metodos de Pago</h3>
+<h4>💰 Billetera TuRides (RKM)</h4>
+<ul>
+    <li>Pago instantaneo: se descuenta de tu saldo al completar el viaje</li>
+    <li>El conductor recibe el dinero al instante en su billetera</li>
+    <li>Recarga tu saldo enviando un Pago Movil a la cuenta de TuRides y subiendo el comprobante</li>
+    <li>El admin aprueba la recarga y tu saldo se actualiza</li>
+</ul>
+<h4>📱 Pago Movil</h4>
+<ul>
+    <li>Transferencia bancaria directa al conductor</li>
+    <li>Al finalizar el viaje, ingresa: banco, telefono y referencia</li>
+    <li>El conductor verifica el pago en persona</li>
+</ul>
+<div class="help-warn">⚠️ El saldo de la billetera se maneja en dolares. La tasa BCV se actualiza diariamente por el admin.</div>
+
+<h3>5. Flujo de un Viaje</h3>
+<h4>Para Clientes:</h4>
+<ol>
+    <li>Selecciona tipo de vehiculo (Carro/Moto)</li>
+    <li>Ingresa origen y destino</li>
+    <li>Revisa conductores disponibles con precio estimado</li>
+    <li>Selecciona metodo de pago y confirma</li>
+    <li>Espera que el conductor acepte</li>
+    <li>Al llegar, califica al conductor (1-5 estrellas)</li>
+</ol>
+<h4>Para Conductores:</h4>
+<ol>
+    <li>Activa tu disponibilidad</li>
+    <li>Recibe solicitudes de clientes</li>
+    <li>Acepta o rechaza el viaje</li>
+    <li>Lleva al cliente al destino</li>
+    <li>Marca "Completar Viaje" - el pago RKM se procesa automatico</li>
+    <li>Califica al cliente (1-5 estrellas)</li>
+</ol>
+
+<h3>6. Estados del Viaje</h3>
+<table>
+    <tr><th>Estado</th><th>Significado</th></tr>
+    <tr><td>pendiente</td><td>Solicitud enviada, esperando conductor</td></tr>
+    <tr><td>aceptado</td><td>Conductor acepto, viaje en curso</td></tr>
+    <tr><td>completado</td><td>Viaje finalizado, pago procesado</td></tr>
+    <tr><td>pago_verificado</td><td>Conductor confirmo recibir el pago</td></tr>
+    <tr><td>calificado</td><td>Ambos se calificaron, viaje cerrado</td></tr>
+    <tr><td>rechazado</td><td>Conductor rechazo la solicitud</td></tr>
+</table>
+
+<h3>7. Billetera y Retiros</h3>
+<h4>Recargar Saldo (Clientes)</h4>
+<ul>
+    <li>Ve a tu billetera y haz clic en "+ Recargar"</li>
+    <li>Envia el Pago Movil a la cuenta de TuRides</li>
+    <li>Ingresa los datos: banco, telefono, referencia y monto</li>
+    <li>El admin revisa y aprueba tu recarga</li>
+</ul>
+<h4>Retirar Saldo (Conductores)</h4>
+<ul>
+    <li>Configura tu cuenta bancaria en la billetera</li>
+    <li>Solicita un retiro indicando el monto</li>
+    <li>Se aplica una comision configurable (default 10%)</li>
+    <li>El admin procesa la transferencia y confirma con referencia</li>
+</ul>
+<div class="help-tip">💡 Tu saldo se actualiza en tiempo real. Cada pago o recarga se refleja al instante.</div>
+
+<h3>8. Seguridad - 2FA</h3>
+<ul>
+    <li>Activa la autenticacion de dos factores desde tu perfil</li>
+    <li>Escanea el QR con Google Authenticator o Authy</li>
+    <li>Ingresa el codigo de 6 digitos para confirmar</li>
+    <li>Cada vez que inicies sesion, se pedira el codigo</li>
+    <li>Puedes desactivar 2FA en cualquier momento (requiere contrasena)</li>
+</ul>
+
+<h3>9. Calificaciones</h3>
+<ul>
+    <li>Al finalizar un viaje, tanto cliente como conductor se califican (1-5 estrellas)</li>
+    <li>Las calificaciones son bidireccionales</li>
+    <li>El promedio de estrellas se muestra en el perfil</li>
+    <li>Ambas calificaciones deben existir para cerrar el viaje</li>
+</ul>
+
+${role === 'admin' ? `
+<h3>10. Panel de Administrador</h3>
+<h4>Gestion de Usuarios</h4>
+<ul>
+    <li>Ver todos los usuarios registrados (clientes y conductores)</li>
+    <li>Estado de 2FA de cada usuario</li>
+    <li>Ver y gestionar todos los viajes</li>
+</ul>
+<h4>Gestion Financiera</h4>
+<ul>
+    <li><strong>Recargas:</strong> Aprobar o rechazar solicitudes de recarga</li>
+    <li><strong>Retiros:</strong> Aprobar, rechazar o marcar como realizado con referencia bancaria</li>
+    <li><strong>Comision por retiro:</strong> Configurable (default 10%)</li>
+    <li><strong>Liquidacion:</strong> Vista de ingresos totales de la plataforma (15% de volumen total)</li>
+</ul>
+<h4>Configuracion</h4>
+<ul>
+    <li><strong>Tasa BCV:</strong> Actualizar tipo de cambio diario</li>
+    <li><strong>Datos bancarios:</strong> Configurar cuenta de TuRides para recibir recargas</li>
+    <li><strong>Comision de retiro:</strong> Porcentaje que cobra la plataforma por cada retiro</li>
+</ul>
+` : ''}
+
+<div class="help-warn" style="margin-top: 20px;">
+    <strong>TuRides v1.0</strong> | Transporte Privado de Pasajeros | Venezuela<br>
+    &copy; 2026 TuRides Inc.
+</div>`;
+    },
+
+    printHelp() {
+        window.print();
     },
 
     setupEventListeners() {

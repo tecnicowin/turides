@@ -1398,3 +1398,114 @@ label {
         padding: 1.25rem;
     }
 }
+
+/* Help View */
+.help-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.help-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.help-body {
+    line-height: 1.6;
+    color: #d1d5db;
+}
+
+.help-body h3 {
+    color: #10b981;
+    margin: 20px 0 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 6px;
+}
+
+.help-body h4 {
+    color: #60a5fa;
+    margin: 12px 0 4px;
+}
+
+.help-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 16px;
+}
+
+.help-body th,
+.help-body td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-size: 0.85rem;
+}
+
+.help-body th {
+    color: #60a5fa;
+    font-weight: 600;
+}
+
+.btn-help {
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-help:hover {
+    background: rgba(96, 165, 250, 0.3);
+}
+
+/* Print styles for PDF */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #view-help,
+    #view-help * {
+        visibility: visible;
+    }
+    #view-help {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: #fff;
+        color: #1a1a2e;
+        padding: 20px;
+    }
+    #view-help .help-body h3 {
+        color: #059669;
+        border-color: #d1d5db;
+    }
+    #view-help .help-body h4 {
+        color: #2563eb;
+    }
+    #view-help .help-body th {
+        color: #2563eb;
+    }
+    #view-help .help-body td,
+    #view-help .help-body li,
+    #view-help .help-body p {
+        color: #1a1a2e;
+    }
+    .help-actions,
+    .main-nav,
+    .app-footer {
+        display: none !important;
+    }
+}
