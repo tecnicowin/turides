@@ -423,7 +423,7 @@ app.put('/api/trips/:id/status', async (req, res) => {
             await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', [status, now, req.params.id]);
         }
     } else if (status === 'pago_verificado') {
-        await dbRun('UPDATE trips SET status = $1, paymentverifiedat = $2 WHERE id = $3', [status, now, req.params.id]);
+        await dbRun('UPDATE trips SET status = $1, paymentstatus = $2, paymentverifiedat = $3 WHERE id = $4', [status, 'pagado', now, req.params.id]);
     } else if (status === 'aceptado') {
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
         await dbRun('UPDATE users SET available = 0 WHERE id = $1', [trip.conductorid]);
