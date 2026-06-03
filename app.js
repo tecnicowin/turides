@@ -1365,8 +1365,16 @@ ${role === 'admin' ? `
                     <span class="text-2xl font-extrabold text-emerald">$${this.session.balance.toFixed(2)}</span>
                 </div>
                 <p class="text-xs text-gray mb-2">Bs ${this.toBs(this.session.balance)} | Total ganado: $${totalEarned.toFixed(2)}</p>
-                ${this.session.balance > 0 ? `<button onclick="App.openMensajeroWithdrawalModal()" class="btn btn-purple w-full">Solicitar Retiro</button>` : '<p class="text-xs text-center text-gray">No hay saldo para retirar.</p>'}
             </div>
+            ${hasBank ? `
+            <div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3">💸 Solicitar Retiro</h3>
+                <div class="form-group">
+                    <label>Monto a retirar ($)</label>
+                    <input type="number" id="mensajero-withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 10.00" class="input">
+                </div>
+                <button onclick="App.requestMensajeroWithdrawal()" class="btn btn-emerald w-full">Solicitar Retiro a Cuenta Bancaria</button>
+            </div>` : `<div class="glass-card mb-4"><p class="text-xs text-red text-center">Configura tu cuenta bancaria para solicitar retiros.</p></div>`}
             ${pendingW.length > 0 ? `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-cyan">⏳ Retiros Pendientes</h3>${pendingW.map(w => `<div class="p-3 bg-gray rounded mb-2"><p class="text-sm"><strong>$${w.amount.toFixed(2)}</strong> → $${(w.netAmount || w.amount).toFixed(2)} (comision: $${(w.commission || 0).toFixed(2)})</p><p class="text-xs text-gray">Solicitado: ${w.createdAt ? new Date(w.createdAt).toLocaleDateString() : '-'}</p></div>`).join('')}</div>` : ''}
             ${approvedW.length > 0 ? (() => {
                 const showCount = this._mensajeroWithdrawalsShowAll ? approvedW.length : 3;
@@ -1410,33 +1418,12 @@ ${role === 'admin' ? `
         this.renderMensajeroDashboard();
     },
 
-    openMensajeroWithdrawalModal() {
-        const modal = document.getElementById('rating-modal');
-        const content = document.getElementById('rating-modal-content');
-        if (!modal || !content) return;
-        content.innerHTML = `
-            <h3 class="text-lg font-bold mb-3">Solicitar Retiro de Billetera</h3>
-            <div class="pricing-card mb-3"><span class="text-sm">Saldo disponible:</span><span class="text-xl font-extrabold text-emerald">$${this.session.balance.toFixed(2)}</span></div>
-            <div class="form-group mb-3"><label class="text-xs">Monto a retirar (USD)</label><input type="number" id="wdr-amount-mensajero" class="input" min="1" max="${this.session.balance}" step="0.01" value="${this.session.balance.toFixed(2)}"></div>
-            <p class="text-xs text-gray mb-3">Comision: <strong id="wdr-commission-mensajero">10%</strong> | Recibiras: <strong id="wdr-net-mensajero">$${(this.session.balance * 0.9).toFixed(2)}</strong></p>
-            <div class="flex gap-2"><button onclick="App.submitMensajeroWithdrawal()" class="btn btn-purple flex-1">Solicitar</button><button onclick="App.closeRatingModal()" class="btn btn-gray flex-1">Cancelar</button></div>
-        `;
-        modal.classList.remove('hidden');
-        document.getElementById('wdr-amount-mensajero')?.addEventListener('input', (e) => {
-            const amt = parseFloat(e.target.value) || 0;
-            const comm = amt * 0.10;
-            document.getElementById('wdr-commission-mensajero').textContent = `$${comm.toFixed(2)}`;
-            document.getElementById('wdr-net-mensajero').textContent = `$${(amt - comm).toFixed(2)}`;
-        });
-    },
-
-    async submitMensajeroWithdrawal() {
-        const amount = parseFloat(document.getElementById('wdr-amount-mensajero')?.value) || 0;
+    async requestMensajeroWithdrawal() {
+        const amount = parseFloat(document.getElementById('mensajero-withdraw-amount')?.value) || 0;
         if (amount <= 0 || amount > this.session.balance) { this.showToast('Monto invalido.', 'error'); return; }
         const result = await API.post('/api/wallet/withdraw', { conductorId: this.session.id, amount });
         if (result.error) { this.showToast(result.error, 'error'); return; }
         this.showToast('Retiro solicitado. Pendiente de aprobacion.', 'success');
-        this.closeRatingModal();
         this.session = await API.get(`/api/users/${this.session.id}`);
         this.renderMensajeroDashboard();
     },
