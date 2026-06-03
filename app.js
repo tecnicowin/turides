@@ -8,6 +8,36 @@ const API = {
     async put(url, data) { const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); }
 };
 
+const BANKS = [
+    { code: '0102', name: 'Banco de Venezuela' },
+    { code: '0104', name: 'Venezolano de Credito' },
+    { code: '0105', name: 'Mercantil Banco' },
+    { code: '0108', name: 'BBVA Provincial' },
+    { code: '0114', name: 'Bancaribe' },
+    { code: '0115', name: 'Banco Exterior' },
+    { code: '0128', name: 'Banco Caroni' },
+    { code: '0134', name: 'Banesco' },
+    { code: '0137', name: 'Banco Sofitasa' },
+    { code: '0138', name: 'Banco Plaza' },
+    { code: '0146', name: 'Bangente' },
+    { code: '0151', name: 'BFC Banco Fondo Comun' },
+    { code: '0156', name: '100% Banco' },
+    { code: '0157', name: 'DelSur Banco Universal' },
+    { code: '0163', name: 'Banco del Tesoro' },
+    { code: '0166', name: 'Banco Agricola de Venezuela' },
+    { code: '0168', name: 'Bancrecer' },
+    { code: '0169', name: 'R4 Banco Microfinanciero' },
+    { code: '0171', name: 'Banco Activo' },
+    { code: '0172', name: 'Bancamiga' },
+    { code: '0173', name: 'Banco Internacional' },
+    { code: '0174', name: 'Banplus' },
+    { code: '0175', name: 'Banco Digital de Los Trabajadores' },
+    { code: '0177', name: 'Banco de la Fuerza Armada' },
+    { code: '0178', name: 'N58 Banco Digital' },
+    { code: '0191', name: 'Banco Nacional de Credito' }
+];
+const BANK_NAMES_MAP = Object.fromEntries(BANKS.map(b => [b.code, b.name]));
+
 const App = {
     session: null,
     activeView: 'login',
@@ -1125,29 +1155,7 @@ ${role === 'admin' ? `
         const myCompleted = trips.filter(t => t.conductorId === this.session.id && ['completado', 'pago_verificado', 'calificado'].includes(t.status) && t.paymentStatus === 'pagado');
         const totalEarned = myCompleted.reduce((acc, t) => acc + t.price, 0);
 
-        const banks = [
-            { code: '0102', name: 'Banco de Venezuela' },
-            { code: '0104', name: 'Banco Provincial' },
-            { code: '0105', name: 'Banco Mercantil' },
-            { code: '0108', name: 'Banco BBVA' },
-            { code: '0114', name: 'Banco Bancaribe' },
-            { code: '0116', name: 'Banco Plaza' },
-            { code: '0128', name: 'Banco Occidental' },
-            { code: '0134', name: 'Banco Venezolano de Credito' },
-            { code: '0151', name: 'Banco BFC' },
-            { code: '0156', name: '100% Banco' },
-            { code: '0157', name: 'Banco Del Tesoro' },
-            { code: '0163', name: 'Banco Guerra' },
-            { code: '0168', name: 'Bancrecer' },
-            { code: '0169', name: 'Mi Banco' },
-            { code: '0171', name: 'Banco del Pueblo Soberano' },
-            { code: '0172', name: 'Bancamiga' },
-            { code: '0173', name: 'Banco Internacional' },
-            { code: '0174', name: 'Banplus' },
-            { code: '0175', name: 'Bicentenario' },
-            { code: '0177', name: 'Banco Facilito' },
-            { code: '0185', name: 'Fondo Comun' }
-        ];
+
 
         let html = `
             <div class="glass-card mb-4">
@@ -1183,7 +1191,7 @@ ${role === 'admin' ? `
                     <label>Banco</label>
                     <select id="driver-bank-select" class="input">
                         <option value="">Seleccionar banco</option>
-                        ${banks.map(b => `<option value="${b.code}" ${bankInfo.bank === b.code ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('')}
+                        ${BANKS.map(b => `<option value="${b.code}" ${bankInfo.bank === b.code ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
@@ -1375,29 +1383,7 @@ ${role === 'admin' ? `
         const myCompleted = trips.filter(t => t.conductorId === this.session.id && ['completado', 'pago_verificado', 'calificado'].includes(t.status) && t.paymentStatus === 'pagado');
         const totalEarned = myCompleted.reduce((acc, t) => acc + t.price, 0);
 
-        const banks = [
-            { code: '0102', name: 'Banco de Venezuela' },
-            { code: '0104', name: 'Banco Provincial' },
-            { code: '0105', name: 'Banco Mercantil' },
-            { code: '0108', name: 'Banco BBVA' },
-            { code: '0114', name: 'Banco Bancaribe' },
-            { code: '0116', name: 'Banco Plaza' },
-            { code: '0128', name: 'Banco Occidental' },
-            { code: '0134', name: 'Banco Venezolano de Credito' },
-            { code: '0151', name: 'Banco BFC' },
-            { code: '0156', name: '100% Banco' },
-            { code: '0157', name: 'Banco Del Tesoro' },
-            { code: '0163', name: 'Banco Guerra' },
-            { code: '0168', name: 'Bancrecer' },
-            { code: '0169', name: 'Mi Banco' },
-            { code: '0171', name: 'Banco del Pueblo Soberano' },
-            { code: '0172', name: 'Bancamiga' },
-            { code: '0173', name: 'Banco Internacional' },
-            { code: '0174', name: 'Banplus' },
-            { code: '0175', name: 'Bicentenario' },
-            { code: '0177', name: 'Banco Facilito' },
-            { code: '0185', name: 'Fondo Comun' }
-        ];
+
 
         let html = `
             <div class="glass-card mb-4">
@@ -1440,7 +1426,7 @@ ${role === 'admin' ? `
                 ${hasBank ? `<div class="p-3 bg-gray rounded"><p class="text-sm"><strong>Banco:</strong> ${bankInfo.bank}</p><p class="text-sm"><strong>Cuenta:</strong> ${bankInfo.account}</p><p class="text-sm"><strong>Telefono:</strong> ${bankInfo.phone || '-'}</p><p class="text-sm"><strong>Titular:</strong> ${bankInfo.name || '-'}</p></div>` : '<p class="text-xs text-red mb-2">No tienes cuenta bancaria configurada.</p>'}
                 <div class="mt-3">
                     <div class="form-group mb-2">
-                        <select id="mensajero-wbank" class="input"><option value="">Selecciona banco</option>${banks.map(b => `<option value="${b.code}" ${bankInfo.bank === b.code ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('')}</select>
+                        <select id="mensajero-wbank" class="input"><option value="">Selecciona banco</option>${BANKS.map(b => `<option value="${b.code}" ${bankInfo.bank === b.code ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('')}</select>
                     </div>
                     <div class="grid grid-2 gap-2 mb-2">
                         <input type="text" id="mensajero-waccount" class="input" placeholder="Nro. Cuenta" value="${bankInfo.account || ''}">
@@ -1655,7 +1641,7 @@ ${role === 'admin' ? `
         if (!container) return;
         container.innerHTML = `<p class="text-center text-cyan p-4">Generando reporte...</p>`;
         const report = await API.get(`/api/admin/daily-report?date=${date}`);
-        const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+        BANK_NAMES_MAP;
         let html = `<div id="daily-report-content">`;
         html += `<div class="p-4 bg-gray rounded mb-4 text-center"><h3 class="font-bold text-purple text-lg">REPORTE DIARIO - ${date}</h3><p class="text-xs text-gray">Generado: ${new Date().toLocaleString()}</p></div>`;
         html += `<div class="grid grid-4 gap-3 mb-4">`;
@@ -1767,14 +1753,14 @@ ${role === 'admin' ? `
             html += `<p class="text-center text-gray p-4">No hay solicitudes de retiro.</p>`;
         } else {
             const defaultCount = 5;
-            const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+            BANK_NAMES_MAP;
             const sorted = [...withdrawals].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             const initial = sorted.slice(0, defaultCount);
             const hidden = sorted.slice(defaultCount);
             const renderWithdrawalCard = (w) => {
                 const statusColor = w.status === 'aprobada' ? 'text-emerald' : w.status === 'rechazada' ? 'text-red' : w.status === 'realizado' ? 'text-purple' : 'text-cyan';
                 const bInfo = JSON.parse(w.bankInfo || '{}');
-                const bankName = bankNames[bInfo.bank] || bInfo.bank || '-';
+                const bankName = BANK_NAMES_MAP[bInfo.bank] || bInfo.bank || '-';
                 const commission = w.commission || 0;
                 const netAmount = w.netAmount || (w.amount - commission);
                 return `<div class="glass-card mb-3 p-4 border-l-purple">
@@ -1989,27 +1975,7 @@ ${role === 'admin' ? `
                     <label>Banco de origen</label>
                     <select id="settings-recharge-bank" class="input">
                         <option value="">Seleccionar banco</option>
-                        <option value="0102">Banco de Venezuela</option>
-                        <option value="0104">Banco Provincial</option>
-                        <option value="0105">Banco Mercantil</option>
-                        <option value="0108">Banco BBVA</option>
-                        <option value="0114">Banco Bancaribe</option>
-                        <option value="0116">Banco Plaza</option>
-                        <option value="0128">Banco Occidental</option>
-                        <option value="0134">Banco Venezolano de Credito</option>
-                        <option value="0151">Banco BFC</option>
-                        <option value="0156">100% Banco</option>
-                        <option value="0157">Banco Del Tesoro</option>
-                        <option value="0163">Banco Guerra</option>
-                        <option value="0168">Bancrecer</option>
-                        <option value="0169">Mi Banco</option>
-                        <option value="0171">Banco del Pueblo Soberano</option>
-                        <option value="0172">Bancamiga</option>
-                        <option value="0173">Banco Internacional</option>
-                        <option value="0174">Banplus</option>
-                        <option value="0175">Bicentenario</option>
-                        <option value="0177">Banco Facilito</option>
-                        <option value="0185">Fondo Comun</option>
+                        ${BANKS.map(b => `<option value="${b.code}">${b.code} - ${b.name}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
@@ -2127,30 +2093,8 @@ ${role === 'admin' ? `
     renderAdminBankConfig(config) {
         const container = document.getElementById('admin-bank-config');
         if (!container) return;
-        const banks = [
-            { code: '0102', name: 'Banco de Venezuela' },
-            { code: '0104', name: 'Banco Provincial' },
-            { code: '0105', name: 'Banco Mercantil' },
-            { code: '0108', name: 'Banco BBVA' },
-            { code: '0114', name: 'Banco Bancaribe' },
-            { code: '0116', name: 'Banco Plaza' },
-            { code: '0128', name: 'Banco Occidental' },
-            { code: '0134', name: 'Banco Venezolano de Credito' },
-            { code: '0151', name: 'Banco BFC' },
-            { code: '0156', name: '100% Banco' },
-            { code: '0157', name: 'Banco Del Tesoro' },
-            { code: '0163', name: 'Banco Guerra' },
-            { code: '0168', name: 'Bancrecer' },
-            { code: '0169', name: 'Mi Banco' },
-            { code: '0171', name: 'Banco del Pueblo Soberano' },
-            { code: '0172', name: 'Bancamiga' },
-            { code: '0173', name: 'Banco Internacional' },
-            { code: '0174', name: 'Banplus' },
-            { code: '0175', name: 'Bicentenario' },
-            { code: '0177', name: 'Banco Facilito' },
-            { code: '0185', name: 'Fondo Comun' }
-        ];
-        const bankOptions = banks.map(b => `<option value="${b.code}" ${config.bankName === b.name ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('');
+
+        const bankOptions = BANKS.map(b => `<option value="${b.code}" ${config.bankName === b.name ? 'selected' : ''}>${b.code} - ${b.name}</option>`).join('');
 
         container.innerHTML = `
             <div class="glass-card mb-4">
