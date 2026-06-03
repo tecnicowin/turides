@@ -500,6 +500,36 @@
             </div>
         </section>
 
+        <!-- MENSAJERO DASHBOARD -->
+        <section id="view-mensajero" class="app-view" style="display: none;">
+            <div class="dashboard-grid">
+                <div class="grid-col-form">
+                    <div id="mensajero-active-trip" style="display: none;" class="mb-4"></div>
+                    <div id="mensajero-radar-container" class="glass-card">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray">
+                            <h2 class="text-xl font-bold flex items-center gap-2">
+                                <span class="radar-dot animate-pulse"></span> Panel de Disponibilidad
+                            </h2>
+                            <label class="switch-container">
+                                <input type="checkbox" id="mensajero-availability" onchange="App.toggleMensajeroAvailability(this)">
+                                <span class="switch-label">Disponible</span>
+                            </label>
+                        </div>
+                        <div id="mensajero-radar-list" class="radar-list"></div>
+                    </div>
+                </div>
+                <div class="grid-col-history">
+                    <div class="glass-card mb-4">
+                        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <span>📋</span> Mis Envios Realizados
+                        </h2>
+                        <div id="mensajero-history" class="table-container"></div>
+                    </div>
+                    <div id="mensajero-wallet"></div>
+                </div>
+            </div>
+        </section>
+
         <!-- ADMIN DASHBOARD -->
         <section id="view-admin" class="app-view" style="display: none;">
             <div class="stats-row grid grid-4 gap-4 mb-6">

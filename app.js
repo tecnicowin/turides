@@ -310,6 +310,7 @@ const App = {
         switch (this.session.role) {
             case 'cliente': await this.renderClienteDashboard(); break;
             case 'conductor': await this.renderConductorDashboard(); break;
+            case 'mensajero': await this.renderMensajeroDashboard(); break;
             case 'admin': await this.renderAdminDashboard(); break;
         }
     },
@@ -629,6 +630,15 @@ ${role === 'admin' ? `
                 const mudanzaForm = document.getElementById('mudanza-order-form');
                 if (mensajeroForm) mensajeroForm.style.display = e.target.value === 'mensajero' ? 'block' : 'none';
                 if (mudanzaForm) mudanzaForm.style.display = e.target.value === 'mudanza' ? 'block' : 'none';
+                if (e.target.value === 'mensajero') {
+                    const pagoMovil = document.querySelector('input[name="payment-method"][value="pago_movil"]');
+                    if (pagoMovil) pagoMovil.disabled = true;
+                    const rkm = document.querySelector('input[name="payment-method"][value="rkm"]');
+                    if (rkm) { rkm.checked = true; rkm.closest('.payment-method-option')?.classList.add('selected'); }
+                } else {
+                    const pagoMovil = document.querySelector('input[name="payment-method"][value="pago_movil"]');
+                    if (pagoMovil) pagoMovil.disabled = false;
+                }
             });
         });
 
@@ -1205,6 +1215,190 @@ ${role === 'admin' ? `
         localStorage.setItem('turides_session', JSON.stringify(this.session));
         this.renderNavbar();
         this.renderConductorWallet();
+    },
+
+    async renderMensajeroDashboard() {
+        const availToggle = document.getElementById('mensajero-availability');
+        if (availToggle) availToggle.checked = this.session.available;
+        const activeContainer = document.getElementById('mensajero-active-trip');
+        const radarContainer = document.getElementById('mensajero-radar-container');
+        const trips = await API.get('/api/trips');
+        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
+
+        if (activeTrip) {
+            radarContainer.style.display = 'none'; activeContainer.style.display = 'block';
+            const od = activeTrip.orderDetails || {};
+            const serviceIcons = { documento: '📄', paquete: '📦', botellon: '💧', compra: '🛒' };
+            const typeName = { documento: 'Documento', paquete: 'Paquete', botellon: 'Botellon', compra: 'Retiro de Compra' };
+
+            let html = `<div class="glass-card"><div class="flex justify-between items-center mb-4 border-b border-gray pb-2"><h3 class="text-xl font-bold">Envio Entrante</h3><span class="badge ${activeTrip.status === 'aceptado' ? 'text-emerald' : 'text-cyan animate-pulse'}">${activeTrip.status.toUpperCase()}</span></div>
+            <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">📋 Orden: ${od.orderId || activeTrip.id}</h4><p class="text-xs text-cyan font-bold">${serviceIcons[od.serviceType] || '📄'} ${typeName[od.serviceType] || od.serviceType || 'Envio'}</p></div>
+            <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">Datos del Solicitante:</h4><p class="text-sm"><strong>Cliente:</strong> ${activeTrip.clientName}</p><p class="text-sm"><strong>Celular:</strong> ${activeTrip.clientPhone}</p></div>
+            <div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">📍 Ruta:</h4><p class="text-sm"><strong>Retiro:</strong> ${activeTrip.originAddress}</p><p class="text-sm"><strong>Entrega:</strong> ${activeTrip.destinationAddress}</p><p class="text-sm"><strong>Distancia:</strong> ${activeTrip.distance.toFixed(1)} km</p></div>`;
+            if (od.senderName || od.receiverName) {
+                html += `<div class="p-3 bg-gray rounded mb-4"><h4 class="font-bold text-sm mb-1">👤 Contactos:</h4>`;
+                if (od.senderName) html += `<p class="text-sm"><strong>Remitente:</strong> ${od.senderName} (${od.senderPhone})</p>`;
+                if (od.receiverName) html += `<p class="text-sm"><strong>Destinatario:</strong> ${od.receiverName} (${od.receiverPhone})</p>`;
+                if (od.description) html += `<p class="text-xs text-gray mt-1"><strong>Descripcion:</strong> ${od.description}</p>`;
+                html += `</div>`;
+            }
+            html += `<div class="pricing-card flex justify-between items-center mb-4"><span class="font-bold text-sm">💰 Pago (Billetera)</span><div class="text-right"><span class="text-2xl font-extrabold text-emerald">$${activeTrip.price.toFixed(2)}</span><br><span class="text-xs text-gray">Bs ${this.toBs(activeTrip.price)}</span></div></div>`;
+
+            if (activeTrip.status === 'pendiente') {
+                html += `<div class="flex gap-2"><button onclick="App.acceptTripByConductor('${activeTrip.id}')" class="btn btn-emerald flex-1">Aceptar Envio</button><button onclick="App.rejectTripByConductor('${activeTrip.id}')" class="btn btn-red flex-1">Rechazar</button></div>`;
+            } else if (activeTrip.status === 'aceptado') {
+                html += `<div class="p-3 bg-dark rounded border-l-purple text-center mb-3"><p class="text-xs text-emerald font-bold mb-2">Has aceptado el envio. Contacta al ${activeTrip.clientPhone}.</p><p class="text-xs text-gray">Muestra la orden al retirar el paquete.</p></div>`;
+                html += `<button onclick="App.completeTripByConductor('${activeTrip.id}')" class="btn btn-purple w-full">Entrega Realizada ✓</button>`;
+            } else if (activeTrip.status === 'completado') {
+                html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago procesado automaticamente via Billetera TuRides.</p><p class="text-sm text-gray">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+            } else if (activeTrip.status === 'pago_verificado') {
+                html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">Envio completado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
+            }
+            html += `</div>`;
+            activeContainer.innerHTML = html;
+        } else {
+            radarContainer.style.display = 'block'; activeContainer.style.display = 'none';
+            const radarList = document.getElementById('mensajero-radar-list');
+            if (this.session.available) {
+                radarList.innerHTML = `<div class="p-4 text-center"><span class="radar-dot animate-ping mb-2"></span><p class="text-sm text-gray mt-2 font-heading">Consola de Mensajero activa.</p><p class="text-xs text-gray">Esperando envios del radar.</p></div>`;
+            } else {
+                radarList.innerHTML = `<p class="text-center text-red p-4 font-bold">Ponte "Disponible" arriba para recibir envios.</p>`;
+            }
+        }
+
+        const historyContainer = document.getElementById('mensajero-history');
+        const closedTrips = trips.filter(t => t.conductorId === this.session.id && ['completado', 'rechazado', 'calificado'].includes(t.status)).reverse();
+        if (closedTrips.length === 0) {
+            historyContainer.innerHTML = `<p class="text-center text-gray p-4">No has completado envios.</p>`;
+        } else {
+            let thtml = '<table class="table"><thead><tr><th>Cliente</th><th>Ruta</th><th>Precio</th><th>Calificacion</th><th>Estado</th></tr></thead><tbody>';
+            closedTrips.forEach(t => {
+                const c = t.status === 'calificado' ? 'text-purple' : t.status === 'completado' ? 'text-emerald' : 'text-red';
+                const rHtml = t.clientRating ? this.renderStarsSmall(t.clientRating, 1) : '<span class="text-xs text-gray">Pendiente</span>';
+                thtml += `<tr><td><strong>${t.clientName}</strong></td><td><span class="text-xs font-bold">${t.originAddress}</span> ➔ <span class="text-xs">${t.destinationAddress}</span></td><td class="font-bold text-emerald">$${t.price.toFixed(2)} <span class="text-xs text-gray">Bs ${this.toBs(t.price)}</span></td><td>${rHtml}</td><td class="${c} font-bold">${t.status.toUpperCase()}</td></tr>`;
+            });
+            thtml += '</tbody></table>';
+            historyContainer.innerHTML = thtml;
+        }
+
+        this.renderMensajeroWallet();
+    },
+
+    async renderMensajeroWallet() {
+        const walletEl = document.getElementById('mensajero-wallet');
+        if (!walletEl) return;
+        const withdrawals = await API.get('/api/wallet/withdrawals');
+        const myWithdrawals = withdrawals.filter(w => w.conductorId === this.session.id);
+        const pendingW = myWithdrawals.filter(w => w.status === 'pendiente');
+        const approvedW = myWithdrawals.filter(w => w.status === 'aprobada');
+        const bankInfo = this.session.bankInfo || {};
+        const hasBank = bankInfo.bank && bankInfo.account;
+
+        const trips = await API.get('/api/trips');
+        const myCompleted = trips.filter(t => t.conductorId === this.session.id && ['completado', 'pago_verificado', 'calificado'].includes(t.status) && t.paymentStatus === 'pagado');
+        const totalEarned = myCompleted.reduce((acc, t) => acc + t.price, 0);
+
+        const banks = [
+            { code: '0102', name: 'Banco de Venezuela' },
+            { code: '0104', name: 'Banco Provincial' },
+            { code: '0105', name: 'Banco Mercantil' },
+            { code: '0108', name: 'Banco BBVA' },
+            { code: '0114', name: 'Banco Bancaribe' },
+            { code: '0116', name: 'Banco Plaza' },
+            { code: '0128', name: 'Banco Occidental' },
+            { code: '0134', name: 'Banco Venezolano de Credito' },
+            { code: '0151', name: 'Banco BFC' },
+            { code: '0156', name: '100% Banco' },
+            { code: '0157', name: 'Banco Del Tesoro' },
+            { code: '0163', name: 'Banco Guerra' },
+            { code: '0168', name: 'Bancrecer' },
+            { code: '0169', name: 'Mi Banco' },
+            { code: '0171', name: 'Banco del Pueblo Soberano' },
+            { code: '0172', name: 'Bancamiga' },
+            { code: '0173', name: 'Banco Internacional' },
+            { code: '0174', name: 'Banplus' },
+            { code: '0175', name: 'Bicentenario' },
+            { code: '0177', name: 'Banco Facilito' },
+            { code: '0185', name: 'Fondo Comun' }
+        ];
+
+        let html = `
+            <div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center gap-2">💰 Mi Billetera</h3>
+                <div class="pricing-card flex justify-between items-center mb-3">
+                    <span class="font-bold">Saldo Disponible</span>
+                    <span class="text-2xl font-extrabold text-emerald">$${this.session.balance.toFixed(2)}</span>
+                </div>
+                <p class="text-xs text-gray mb-2">Bs ${this.toBs(this.session.balance)} | Total ganado: $${totalEarned.toFixed(2)}</p>
+                ${this.session.balance > 0 ? `<button onclick="App.openMensajeroWithdrawalModal()" class="btn btn-purple w-full">Solicitar Retiro</button>` : '<p class="text-xs text-center text-gray">No hay saldo para retirar.</p>'}
+            </div>
+            ${pendingW.length > 0 ? `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3 text-cyan">⏳ Retiros Pendientes</h3>${pendingW.map(w => `<div class="p-3 bg-gray rounded mb-2"><p class="text-sm"><strong>$${w.amount.toFixed(2)}</strong> → $${w.netAmount.toFixed(2)} (comision: $${w.commission.toFixed(2)})</p><p class="text-xs text-gray">Solicitado: ${w.createdAt ? new Date(w.createdAt).toLocaleDateString() : '-'}</p></div>`).join('')}</div>` : ''}
+            <div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3">🏦 Cuenta Bancaria para Retiros</h3>
+                ${hasBank ? `<div class="p-3 bg-gray rounded"><p class="text-sm"><strong>Banco:</strong> ${bankInfo.bank}</p><p class="text-sm"><strong>Cuenta:</strong> ${bankInfo.account}</p><p class="text-sm"><strong>Telefono:</strong> ${bankInfo.phone}</p><p class="text-sm"><strong>Titular:</strong> ${bankInfo.name}</p></div>` : '<p class="text-xs text-red mb-2">No tienes cuenta bancaria configurada.</p>'}
+                <div class="mt-3">
+                    <div class="form-group mb-2">
+                        <select id="mensajero-wbank" class="input"><option value="">Selecciona banco</option>${banks.map(b => `<option value="${b.name}" ${bankInfo.bank === b.name ? 'selected' : ''}>${b.name}</option>`).join('')}</select>
+                    </div>
+                    <div class="grid grid-2 gap-2 mb-2">
+                        <input type="text" id="mensajero-waccount" class="input" placeholder="Nro. Cuenta" value="${bankInfo.account || ''}">
+                        <input type="text" id="mensajero-wphone" class="input" placeholder="Telefono" value="${bankInfo.phone || ''}">
+                    </div>
+                    <input type="text" id="mensajero-wname" class="input mb-2" placeholder="Titular de la cuenta" value="${bankInfo.name || ''}">
+                    <button onclick="App.saveMensajeroBankInfo()" class="btn btn-cyan w-full">Guardar Cuenta</button>
+                </div>
+            </div>
+        `;
+        walletEl.innerHTML = html;
+    },
+
+    async toggleMensajeroAvailability(checkbox) {
+        await API.put(`/api/users/${this.session.id}`, { available: checkbox.checked });
+        this.session.available = checkbox.checked;
+        this.renderMensajeroDashboard();
+    },
+
+    openMensajeroWithdrawalModal() {
+        const modal = document.getElementById('rating-modal');
+        const content = document.getElementById('rating-modal-content');
+        if (!modal || !content) return;
+        content.innerHTML = `
+            <h3 class="text-lg font-bold mb-3">Solicitar Retiro de Billetera</h3>
+            <div class="pricing-card mb-3"><span class="text-sm">Saldo disponible:</span><span class="text-xl font-extrabold text-emerald">$${this.session.balance.toFixed(2)}</span></div>
+            <div class="form-group mb-3"><label class="text-xs">Monto a retirar (USD)</label><input type="number" id="wdr-amount-mensajero" class="input" min="1" max="${this.session.balance}" step="0.01" value="${this.session.balance.toFixed(2)}"></div>
+            <p class="text-xs text-gray mb-3">Comision: <strong id="wdr-commission-mensajero">10%</strong> | Recibiras: <strong id="wdr-net-mensajero">$${(this.session.balance * 0.9).toFixed(2)}</strong></p>
+            <div class="flex gap-2"><button onclick="App.submitMensajeroWithdrawal()" class="btn btn-purple flex-1">Solicitar</button><button onclick="App.closeRatingModal()" class="btn btn-gray flex-1">Cancelar</button></div>
+        `;
+        modal.classList.remove('hidden');
+        document.getElementById('wdr-amount-mensajero')?.addEventListener('input', (e) => {
+            const amt = parseFloat(e.target.value) || 0;
+            const comm = amt * 0.10;
+            document.getElementById('wdr-commission-mensajero').textContent = `$${comm.toFixed(2)}`;
+            document.getElementById('wdr-net-mensajero').textContent = `$${(amt - comm).toFixed(2)}`;
+        });
+    },
+
+    async submitMensajeroWithdrawal() {
+        const amount = parseFloat(document.getElementById('wdr-amount-mensajero')?.value) || 0;
+        if (amount <= 0 || amount > this.session.balance) { this.showToast('Monto invalido.', 'error'); return; }
+        const result = await API.post('/api/wallet/withdraw', { conductorId: this.session.id, amount });
+        if (result.error) { this.showToast(result.error, 'error'); return; }
+        this.showToast('Retiro solicitado. Pendiente de aprobacion.', 'success');
+        this.closeRatingModal();
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        this.renderMensajeroDashboard();
+    },
+
+    async saveMensajeroBankInfo() {
+        const bank = document.getElementById('mensajero-wbank')?.value;
+        const account = document.getElementById('mensajero-waccount')?.value;
+        const phone = document.getElementById('mensajero-wphone')?.value;
+        const name = document.getElementById('mensajero-wname')?.value;
+        if (!bank || !account) { this.showToast('Banco y cuenta son requeridos.', 'error'); return; }
+        await API.put(`/api/users/${this.session.id}`, { bankInfo: { bank, account, phone, name } });
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        this.showToast('Cuenta bancaria guardada.', 'success');
+        this.renderMensajeroDashboard();
     },
 
     async toggleAvailability(checkbox) {
