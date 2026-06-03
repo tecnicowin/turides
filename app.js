@@ -606,7 +606,7 @@ ${role === 'admin' ? `
                 } else if (vehicleType === 'camion') {
                     data.vehicleData.capacity = document.getElementById('reg-camion-capacity')?.value || '1';
                     data.vehicleData.interiorTrips = document.getElementById('reg-camion-interior')?.value || 'si';
-                    if (data.vehicleData.capacity === '1') data.vehicleData.type = 'camioneta';
+                    if (data.vehicleData.capacity === '1') data.vehicleData.type = 'mudanza_pickup';
                     else if (data.vehicleData.capacity === '3.5') data.vehicleData.type = 'mudanza_350';
                     else data.vehicleData.type = 'mudanza_750';
                 }
