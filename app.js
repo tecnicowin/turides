@@ -3,9 +3,15 @@ const socket = io();
 const KILOMETER_RATE_CONFIG = { carro: { base: 1.80, perKm: 0.50, minDistance: 2.5 }, camioneta: { base: 4.50, perKm: 0.90, minDistance: 2.5 }, moto: { base: 0.80, perKm: 0.40, minDistance: 2.5 }, moto_delivery: { base: 1.80, perKm: 0.55, minDistance: 2.5 },     mensajero: { base: 0.50, perKm: 1.00, minDistance: 0.3, maxDistance: 3.0 }, mudanza: { flatRate: true }, mudanza_pickup: { base: 50, perKm: 0, flatRate: true }, mudanza_350: { base: 100, perKm: 0, flatRate: true }, mudanza_750: { base: 180, perKm: 0, flatRate: true } };
 
 const API = {
-    async get(url) { const r = await fetch(url); return r.json(); },
-    async post(url, data) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); },
-    async put(url, data) { const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); }
+    _headers() {
+        const h = { 'Content-Type': 'application/json' };
+        const session = App.session;
+        if (session && session.id) h['x-user-id'] = session.id;
+        return h;
+    },
+    async get(url) { const r = await fetch(url, { headers: this._headers() }); return r.json(); },
+    async post(url, data) { const r = await fetch(url, { method: 'POST', headers: this._headers(), body: JSON.stringify(data) }); return r.json(); },
+    async put(url, data) { const r = await fetch(url, { method: 'PUT', headers: this._headers(), body: JSON.stringify(data) }); return r.json(); }
 };
 
 const BANKS = [
@@ -102,13 +108,16 @@ const App = {
         if (savedSession) {
             try {
                 const parsed = JSON.parse(savedSession);
+                this.session = { id: parsed.id };
                 const fresh = await API.get(`/api/users/${parsed.id}`);
                 if (fresh && !fresh.error) {
                     this.session = fresh;
                 } else {
+                    this.session = null;
                     localStorage.removeItem('turides_session');
                 }
             } catch(e) {
+                this.session = null;
                 localStorage.removeItem('turides_session');
             }
         }
@@ -239,10 +248,11 @@ const App = {
             this.refreshSession();
         });
 
-        socket.on('connect', () => {
+        socket.on('reconnect', () => {
             if (this.session) {
                 const room = (this.session.role === 'conductor' || this.session.role === 'mensajero') ? 'conductor_' + this.session.id : this.session.role + '_' + this.session.id;
                 socket.emit('join', room);
+                this.updateViewContent();
             }
         });
 

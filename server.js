@@ -2,8 +2,11 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const bcrypt = require('bcrypt');
 const PDFDocument = require('pdfkit');
 const { dbRun, dbGet, dbAll, dbExec, dbClientExec } = require('./db');
+
+const BCRYPT_ROUNDS = 10;
 
 const app = express();
 const server = http.createServer(app);
@@ -29,6 +32,25 @@ const SEED_CONFIG = {
     bcvLastUpdate: new Date().toISOString(),
     withdrawalCommission: '10'
 };
+
+async function requireAuth(req, res, next) {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'No autenticado' });
+    const user = await dbGet('SELECT id, role FROM users WHERE id = $1', [userId]);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    req.authUser = user;
+    next();
+}
+
+async function requireAdmin(req, res, next) {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'No autenticado' });
+    const user = await dbGet('SELECT id, role FROM users WHERE id = $1', [userId]);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+    req.authUser = user;
+    next();
+}
 
 const USER_MAP = {
     tariffmode: 'tariffMode', fixedtariffs: 'fixedTariffs', bankinfo: 'bankInfo',
@@ -187,8 +209,10 @@ const PLATFORM_COMMISSION_RATE = 0.10;
 // === AUTH ===
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
-    const row = await dbGet('SELECT * FROM users WHERE email = $1 AND password = $2', [email.toLowerCase(), password]);
+    const row = await dbGet('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     if (!row) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    const passwordMatch = await bcrypt.compare(password, row.password);
+    if (!passwordMatch) return res.status(401).json({ error: 'Credenciales incorrectas' });
     const m = mapRow(row, USER_MAP);
     if (m.twoFactorEnabled) return res.json({ twoFactorRequired: true, userId: m.id });
     res.json(parseUser(row));
@@ -211,11 +235,12 @@ app.post('/api/register', async (req, res) => {
     const { name, phone, email, password, role, vehicleData } = req.body;
     const exists = await dbGet('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (exists) return res.status(400).json({ error: 'El correo ya esta registrado' });
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const vehicle = role === 'conductor' && vehicleData ? JSON.stringify({ type: vehicleData.type || 'carro', brand: vehicleData.brand, model: vehicleData.model, passengers: parseInt(vehicleData.passengers) || 4, suitcases: parseInt(vehicleData.suitcases) || 2 }) : role === 'mensajero' ? JSON.stringify({ type: 'mensajero', brand: 'N/A', model: 'A pie' }) : null;
     const tariffMode = role === 'conductor' ? (vehicleData?.tariffMode || 'kilometros') : null;
     const fixedTariffs = role === 'conductor' ? JSON.stringify({ defaultPrice: 20.00 }) : null;
     await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, vehicle, tariffmode, fixedtariffs, balance, ratings, bankinfo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12)',
-        [email, name, phone, email.toLowerCase(), password, role, 0, vehicle, tariffMode, fixedTariffs, '[]', '{}']);
+        [email, name, phone, email.toLowerCase(), hashedPassword, role, 0, vehicle, tariffMode, fixedTariffs, '[]', '{}']);
     const user = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [email]));
     io.emit('user:created', user);
     res.json(user);
@@ -234,8 +259,9 @@ app.post('/api/setup/admin', async (req, res) => {
     const { name, email, phone, password } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Nombre, email y contrasena son requeridos' });
     const id = email.toLowerCase();
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await dbRun('INSERT INTO users (id, name, phone, email, password, role, available, balance, ratings, bankinfo, passwordchanged) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, 1)',
-        [id, name, phone || null, email.toLowerCase(), password, 'admin', 0, '[]', '{}']);
+        [id, name, phone || null, email.toLowerCase(), hashedPassword, 'admin', 0, '[]', '{}']);
     const user = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [id]));
     io.emit('user:created', user);
     res.json(user);
@@ -245,9 +271,11 @@ app.post('/api/change-password', async (req, res) => {
     const { userId, currentPassword, newPassword } = req.body;
     const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (row.password !== currentPassword) return res.status(401).json({ error: 'Contrasena actual incorrecta' });
+    const passwordMatch = await bcrypt.compare(currentPassword, row.password);
+    if (!passwordMatch) return res.status(401).json({ error: 'Contrasena actual incorrecta' });
     if (!newPassword || newPassword.length < 3) return res.status(400).json({ error: 'Minimo 3 caracteres' });
-    await dbRun('UPDATE users SET password = $1, passwordchanged = 1 WHERE id = $2', [newPassword, userId]);
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await dbRun('UPDATE users SET password = $1, passwordchanged = 1 WHERE id = $2', [hashedPassword, userId]);
     const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [userId]));
     io.emit('user:updated', updated);
     res.json({ success: true, message: 'Contrasena actualizada' });
@@ -291,7 +319,8 @@ app.post('/api/2fa/disable', async (req, res) => {
     const { userId, password } = req.body;
     const row = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (row.password !== password) return res.status(401).json({ error: 'Contrasena incorrecta' });
+    const passwordMatch = await bcrypt.compare(password, row.password);
+    if (!passwordMatch) return res.status(401).json({ error: 'Contrasena incorrecta' });
     await dbRun('UPDATE users SET twofactorenabled = 0, twofactorsecret = NULL WHERE id = $1', [userId]);
     const updated = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [userId]));
     io.emit('user:updated', updated);
@@ -303,18 +332,18 @@ app.post('/api/setup/reset', (req, res) => {
 });
 
 // === USERS ===
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', requireAuth, async (req, res) => {
     const rows = await dbAll('SELECT * FROM users');
     res.json(rows.map(r => parseUser(r)));
 });
 
-app.get('/api/users/:id', async (req, res) => {
+app.get('/api/users/:id', requireAuth, async (req, res) => {
     const row = await dbGet('SELECT * FROM users WHERE id = $1', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json(parseUser(row));
 });
 
-app.put('/api/users/:id', async (req, res) => {
+app.put('/api/users/:id', requireAuth, async (req, res) => {
     const row = await dbGet('SELECT * FROM users WHERE id = $1', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Usuario no encontrado' });
     const updates = req.body;
@@ -335,7 +364,7 @@ app.put('/api/users/:id', async (req, res) => {
 });
 
 // === CONDUCTORS ===
-app.get('/api/conductors/available', async (req, res) => {
+app.get('/api/conductors/available', requireAuth, async (req, res) => {
     const distance = parseFloat(req.query.distance) || 10;
     const vehicleType = req.query.vehicleType || 'carro';
     const rows = await dbAll("SELECT * FROM users WHERE role IN ('conductor', 'mensajero') AND available = 1");
@@ -372,12 +401,12 @@ app.get('/api/conductors/available', async (req, res) => {
 });
 
 // === TRIPS ===
-app.get('/api/trips', async (req, res) => {
+app.get('/api/trips', requireAuth, async (req, res) => {
     const rows = await dbAll('SELECT * FROM trips ORDER BY createdat DESC');
     res.json(rows.map(r => parseTrip(r)));
 });
 
-app.post('/api/trips', async (req, res) => {
+app.post('/api/trips', requireAuth, async (req, res) => {
     const { clientId, clientName, clientPhone, originAddress, destinationAddress, distance, conductorId, price, paymentMethod, orderDetails } = req.body;
     const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [conductorId]);
     if (!conductor) return res.status(404).json({ error: 'Conductor no encontrado' });
@@ -406,7 +435,7 @@ app.post('/api/trips', async (req, res) => {
     res.json(trip);
 });
 
-app.put('/api/trips/:id/status', async (req, res) => {
+app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
     const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { status } = req.body;
@@ -501,7 +530,7 @@ app.put('/api/trips/:id/status', async (req, res) => {
     res.json(updated);
 });
 
-app.put('/api/trips/:id/rating', async (req, res) => {
+app.put('/api/trips/:id/rating', requireAuth, async (req, res) => {
     const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     const { field, value } = req.body;
@@ -530,10 +559,10 @@ app.put('/api/trips/:id/rating', async (req, res) => {
 });
 
 // === CONFIG ===
-app.get('/api/config', async (req, res) => res.json(await getConfig()));
-app.get('/api/rkm-config', async (req, res) => res.json(await getConfig()));
+app.get('/api/config', requireAuth, async (req, res) => res.json(await getConfig()));
+app.get('/api/rkm-config', requireAuth, async (req, res) => res.json(await getConfig()));
 
-app.put('/api/config', async (req, res) => {
+app.put('/api/config', requireAdmin, async (req, res) => {
     for (const [k, v] of Object.entries(req.body)) {
         await dbRun('INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', [k, String(v)]);
     }
@@ -548,7 +577,7 @@ app.get('/api/fare-info', async (req, res) => {
 });
 
 // === PAYMENTS ===
-app.post('/api/payments/rkm', async (req, res) => {
+app.post('/api/payments/rkm', requireAuth, async (req, res) => {
     const { tripId } = req.body;
     const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [tripId]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
@@ -576,7 +605,7 @@ app.post('/api/payments/rkm', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/api/payments/pago_movil', async (req, res) => {
+app.post('/api/payments/pago_movil', requireAuth, async (req, res) => {
     const { tripId, phone, bankCode, reference } = req.body;
     const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [tripId]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
@@ -591,7 +620,7 @@ app.post('/api/payments/pago_movil', async (req, res) => {
 });
 
 // === WALLET RECHARGE ===
-app.post('/api/wallet/recharge', async (req, res) => {
+app.post('/api/wallet/recharge', requireAuth, async (req, res) => {
     const { userId, amount, phone, bankCode, reference } = req.body;
     const user = await dbGet('SELECT * FROM users WHERE id = $1', [userId]);
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -606,12 +635,12 @@ app.post('/api/wallet/recharge', async (req, res) => {
     res.json({ success: true, id, message: 'Solicitud de recarga enviada.' });
 });
 
-app.get('/api/wallet/recharges', async (req, res) => {
+app.get('/api/wallet/recharges', requireAuth, async (req, res) => {
     const rows = await dbAll('SELECT * FROM recharges ORDER BY createdat DESC');
     res.json(rows.map(r => mapRow(r, RECHARGE_MAP)));
 });
 
-app.put('/api/wallet/recharges/:id', async (req, res) => {
+app.put('/api/wallet/recharges/:id', requireAdmin, async (req, res) => {
     const { status, adminNote } = req.body;
     const recharge = await dbGet('SELECT * FROM recharges WHERE id = $1', [req.params.id]);
     if (!recharge) return res.status(404).json({ error: 'Recarga no encontrada' });
@@ -632,7 +661,7 @@ app.put('/api/wallet/recharges/:id', async (req, res) => {
 });
 
 // === WALLET WITHDRAWAL ===
-app.post('/api/wallet/withdraw', async (req, res) => {
+app.post('/api/wallet/withdraw', requireAuth, async (req, res) => {
     const { conductorId, amount } = req.body;
     const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [conductorId]);
     if (!conductor) return res.status(404).json({ error: 'Conductor no encontrado' });
@@ -659,12 +688,12 @@ app.post('/api/wallet/withdraw', async (req, res) => {
     res.json({ success: true, id, message: 'Solicitud de retiro enviada.' });
 });
 
-app.get('/api/wallet/withdrawals', async (req, res) => {
+app.get('/api/wallet/withdrawals', requireAuth, async (req, res) => {
     const rows = await dbAll('SELECT * FROM withdrawals ORDER BY createdat DESC');
     res.json(rows.map(r => mapRow(r, WITHDRAWAL_MAP)));
 });
 
-app.put('/api/wallet/withdrawals/:id', async (req, res) => {
+app.put('/api/wallet/withdrawals/:id', requireAdmin, async (req, res) => {
     const { status, adminNote, reference } = req.body;
     const withdrawal = await dbGet('SELECT * FROM withdrawals WHERE id = $1', [req.params.id]);
     if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
@@ -695,7 +724,7 @@ app.put('/api/wallet/withdrawals/:id', async (req, res) => {
 });
 
 // === WITHDRAWAL PDF TICKET ===
-app.get('/api/wallet/withdrawals/:id/ticket', async (req, res) => {
+app.get('/api/wallet/withdrawals/:id/ticket', requireAuth, async (req, res) => {
     const withdrawal = await dbGet('SELECT * FROM withdrawals WHERE id = $1', [req.params.id]);
     if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
@@ -744,7 +773,7 @@ app.get('/api/wallet/withdrawals/:id/ticket', async (req, res) => {
 });
 
 // === ADMIN DAILY REPORT ===
-app.get('/api/admin/daily-report', async (req, res) => {
+app.get('/api/admin/daily-report', requireAdmin, async (req, res) => {
     const date = req.query.date || new Date().toISOString().slice(0, 10);
     const trips = await dbAll('SELECT * FROM trips WHERE createdat LIKE $1 ORDER BY createdat ASC', [date + '%']);
     const transactions = await dbAll('SELECT * FROM transactions WHERE createdat LIKE $1 ORDER BY createdat ASC', [date + '%']);
@@ -771,13 +800,13 @@ app.get('/api/admin/daily-report', async (req, res) => {
 });
 
 // === TRANSACTIONS ===
-app.get('/api/transactions', async (req, res) => {
+app.get('/api/transactions', requireAdmin, async (req, res) => {
     const rows = await dbAll('SELECT * FROM transactions ORDER BY createdat DESC');
     res.json(rows.map(r => mapRow(r, TXN_MAP)));
 });
 
 // === ADMIN PAGO MOVIL MUDANZA VERIFICATION ===
-app.put('/api/admin/verify-pago-movil/:tripId', async (req, res) => {
+app.put('/api/admin/verify-pago-movil/:tripId', requireAdmin, async (req, res) => {
     const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.tripId]);
     if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
     if (trip.paymentmethod !== 'pago_movil' || trip.status !== 'pago_movil_pendiente') {
@@ -799,7 +828,7 @@ app.put('/api/admin/verify-pago-movil/:tripId', async (req, res) => {
 });
 
 // === BACKUP & RESTORE ===
-app.get('/api/admin/backup/status', async (req, res) => {
+app.get('/api/admin/backup/status', requireAdmin, async (req, res) => {
     try {
         const row = await dbGet("SELECT value FROM config WHERE key = 'lastBackupAt'");
         const lastBackup = row ? row.value : null;
@@ -810,7 +839,7 @@ app.get('/api/admin/backup/status', async (req, res) => {
     }
 });
 
-app.post('/api/admin/backup/track', async (req, res) => {
+app.post('/api/admin/backup/track', requireAdmin, async (req, res) => {
     try {
         await dbRun("INSERT INTO config (key, value) VALUES ('lastBackupAt', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [new Date().toISOString()]);
         res.json({ ok: true });
@@ -819,13 +848,8 @@ app.post('/api/admin/backup/track', async (req, res) => {
     }
 });
 
-app.post('/api/admin/backup/google-drive', async (req, res) => {
+app.post('/api/admin/backup/google-drive', requireAdmin, async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'];
-        if (!userId) return res.status(401).json({ error: 'No autenticado' });
-        const admin = await dbGet("SELECT role FROM users WHERE id = $1", [userId]);
-        if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
-
         const credsJson = process.env.GOOGLE_DRIVE_CREDENTIALS;
         if (!credsJson) return res.status(400).json({ error: 'Google Drive no configurado. Agrega GOOGLE_DRIVE_CREDENTIALS en las variables de entorno de Render.' });
 
@@ -873,13 +897,8 @@ app.post('/api/admin/backup/google-drive', async (req, res) => {
     }
 });
 
-app.get('/api/admin/backup', async (req, res) => {
+app.get('/api/admin/backup', requireAdmin, async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'];
-        if (!userId) return res.status(401).json({ error: 'No autenticado' });
-        const admin = await dbGet("SELECT role FROM users WHERE id = $1", [userId]);
-        if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
-
         const users = (await dbAll('SELECT * FROM users')).map(u => {
             const m = mapRow(u, USER_MAP);
             return { ...m, vehicle: m.vehicle ? JSON.parse(m.vehicle) : null, ratings: m.ratings ? JSON.parse(m.ratings) : [], bankInfo: m.bankInfo ? JSON.parse(m.bankInfo) : null };
@@ -907,13 +926,8 @@ app.get('/api/admin/backup', async (req, res) => {
     }
 });
 
-app.post('/api/admin/restore', express.json({ limit: '10mb' }), async (req, res) => {
+app.post('/api/admin/restore', requireAdmin, express.json({ limit: '10mb' }), async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'];
-        if (!userId) return res.status(401).json({ error: 'No autenticado' });
-        const admin = await dbGet("SELECT role FROM users WHERE id = $1", [userId]);
-        if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
-
         const backup = req.body;
         if (!backup || !backup.data) return res.status(400).json({ error: 'Formato de backup inválido' });
 

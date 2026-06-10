@@ -40,12 +40,12 @@ async function dbExec(sql) {
     await p.query(sql);
 }
 
-async function dbClientExec(sql) {
+async function dbClientExec(sql, args = []) {
     const p = getPool();
     const client = await p.connect();
     try {
         await client.query('BEGIN');
-        await client.query(sql);
+        await client.query(sql, args);
         await client.query('COMMIT');
     } catch (e) {
         await client.query('ROLLBACK');

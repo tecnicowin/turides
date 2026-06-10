@@ -1,176 +1,239 @@
-# Bitácora de Desarrollo - TuRides
+# Bitacora de Desarrollo - TuRides
 
-## Última sesión: 03/Junio/2026 11:30 PM
-
----
-
-## ✅ Completado esta sesión
-
-### FIX CRÍTICO: Pérdida de datos en cada deploy
-**Problema:** `initDB()` ejecutaba `DROP TABLE IF EXISTS` en todas las tablas cada vez que el servidor arrancaba. En Render, esto ocurría en cada deploy, sleep/wake, o restart.
-
-**Solución:** Eliminado el loop `DROP TABLE` y cambiado `CREATE TABLE` a `CREATE TABLE IF NOT EXISTS`. Ahora las tablas se crean solo si no existen, y los datos persisten entre deploys.
-
-**Archivo:** `server.js:60-113` — función `initDB()`
-
-**Commits:**
-- `9cee818` — FIX: Remove DROP TABLE from initDB - data now persists across deploys
-- `c2ca899` — Add admin backup/restore system (JSON export/import)
-- `c09198e` — FIX: backup/restore auth - use x-user-id header instead of undefined middleware
-- `23d10a3` — Add backup reminder + Google Drive auto-upload
-- `83ebea9` — Add Walking Courier (Mensajero) service with digital orders
-- `c1cffdd` — Add Mudanza service (Pick-Up, 350, 750) with sub-type selection
-- `2a7ccef` — Restructure registration: 3 roles + vehicle sub-types (Carro/Moto/Camion)
-
-### Servicio Walking Courier (Mensajero)
-- **Tipo de vehículo:** `mensajero` (🚶)
-- **Tarifa:** $1.50 base (0-1 km) + $1.00/km adicional, máximo 2 km
-- **Servicios:** Documentos, Paquetes (<2kg), Botellones de Agua, Retiro de Compras
-- **Orden digital:** Se genera `MENS-[ID]` con datos del remitente, destinatario, tipo de servicio y descripción
-- **Flujo:** Cliente llena formulario de envío → Conductor acepta → Muestra orden al retirar paquete
-- **Archivos:** `server.js` (rate + orderdetails), `app.js` (UI + form), `index.html` (radio + form)
-
-### Servicio Carga/Mudanza
-- **Tipo de vehículo:** `mudanza` (🚚)
-- **Sub-tipo:** Seleccionable desde dropdown
-  - Pick-Up (1 ton): $50 flat
-  - Camión 350 (3.5 ton): $100 flat
-  - Camión 750 (7 ton): $180 flat
-- **Tarifa:** Flat rate (sin cargo por km)
-- **Orden digital:** Incluye sub-tipo, descripción, datos del solicitante
-- **Flujo:** Cliente selecciona "Carga/Mudanza" → Elige sub-tipo → Contrata → Conductor acepta → Muestra orden
-
-### Restructuración de Registro
-- **3 roles:** Cliente (sin vehículo), Mensajero (sin vehículo), Conductor (con vehículo)
-- **Conductor sub-tipo de vehículo:**
-  - 🚗 Carro: Pasajeros + Maletas
-  - 🏍️ Moto: Viajes / Delivery / Ambas
-  - 🚚 Camión: Capacidad (1 ton, 3.5 ton, 7 ton) + Viajes al Interior (Si/No)
-- **Clasificación automática:**
-  - Camión 1 ton → Camioneta
-  - Camión 3.5 ton → Mudanza 350
-  - Camión 7 ton → Mudanza 750
-  - Moto Ambas → moto_ambas (acepta viajes y delivery)
-- **Archivos:** `index.html` (radio buttons 3 roles + sub-tipos), `app.js` (event handlers + data collection), `server.js` (conductor filtering)
-
-### Sistema de Backup/Restauración
-- **Endpoint GET `/api/admin/backup`**: Exporta todos los datos (users, trips, transactions, config, recharges, withdrawals) como archivo JSON descargable
-- **Endpoint POST `/api/admin/restore`**: Importa datos desde un archivo JSON con upsert (ON CONFLICT DO UPDATE/DO NOTHING)
-- **Endpoint GET `/api/admin/backup/status`**: Trackea último backup y si necesita crear uno nuevo
-- **Endpoint POST `/api/admin/backup/track`**: Marca fecha del último backup
-- **Endpoint POST `/api/admin/backup/google-drive`**: Sube backup automáticamente a Google Drive
-- **UI Admin**: 3 botones — Descargar, Subir a Google Drive, Restaurar
-- **Recordatorio**: Banner amarillo cada 7 días sin backup
-- **Seguridad**: Solo admin puede usar estos endpoints
-- **Transacción SQL**: Restore usa BEGIN/COMMIT/ROLLBACK para garantizar integridad
-
-### Configuración Google Drive (pendiente)
-- Variable de entorno `GOOGLE_DRIVE_CREDENTIALS`: JSON de Service Account
-- Variable de entorno `GOOGLE_DRIVE_FOLDER_ID` (opcional): ID de carpeta destino
-- Ver instrucciones en la sección de setup de Google Drive
+## Ultima actualizacion: 3 de Junio 2026
 
 ---
 
-## ✅ Completado esta sesión
+## Estado Actual del Proyecto
 
-### Tarifas por categorías de vehículo
-Se actualizaron las tarifas basadas en datos de mercado venezolano:
+### Stack
+- **Backend:** Express + Socket.io + PostgreSQL (Neon)
+- **Frontend:** SPA vanilla JS (`app.js`)
+- **Deploy:** Render (auto-deploy desde GitHub main)
+- **DB:** Neon PostgreSQL (cloud) con PITR 6 horas
 
-| Categoría | Tarifa Base | Por Km | Dist. Mín. | Ícono |
-|-----------|------------|--------|------------|-------|
-| Moto (Transporte) | $0.80 | $0.40/km | 2.5 km | 🏍️ |
-| Moto Delivery | $1.80 | $0.55/km | 2.5 km | 🛵 |
-| Carro | $1.80 | $0.50/km | 2.5 km | 🚗 |
-| Camioneta (Confort) | $4.50 | $0.90/km | 2.5 km | 🚙 |
-
-**Archivos modificados:**
-- `server.js`: Línea ~38-43 — `KILOMETER_RATE` actualizado con 4 categorías
-- `app.js`: Línea ~1 — `KILOMETER_RATE_CONFIG` actualizado con 4 categorías
-- `app.js`: Línea ~1196 — Icono del admin table usa `vIcons` con 4 tipos
-- `index.html`: Radio buttons en registro y búsqueda con 4 opciones en grid 2x2
-- `app.js`: Texto de ayuda actualizado con 4 categorías
-
-### Logo de TuRides
-Se agregó imagen `images/logo.png` en 3 ubicaciones:
-
-**Archivos modificados:**
-- `index.html`: Navbar (32x32), Login (120x120 con sombra púrpura), Setup (120x120 con sombra púrpura)
-- `style.css`: Estilos `.nav-logo`, `.brand-logo-container`, `.brand-logo`
-
-**Imagen:** `D:\TuRides\images\logo.png` (674 KB)
-**Copia fuente:** `D:\TuRides\images\96c06f71.png`
-
-### Commits realizados
-1. `ec5da3e` — Add camioneta and moto_delivery categories with market-based fares
-2. `b715156` — Add TuRides logo to navbar, login, and setup pages
-3. `37f87e4` — Update logo image
+### Repositorio
+- GitHub: `tecnicowin/turides`
+- Branch: `main`
 
 ---
 
-## 📋 Pendientes para próxima sesión
+## Funcionalidades Implementadas
 
-### Funcionalidades a revisar
-- [ ] Verificar flujo completo: Admin setup → login → 2FA → cliente busca viaje (4 tipos) → conductor acepta → pago RKM → calificación
-- [ ] Verificar que los filtros de búsqueda por tipo de vehículo funcionan correctamente
-- [ ] Probar que el cálculo de tarifas usa las nuevas tasas
-- [ ] Verificar que los conductores pueden seleccionar Camioneta o Moto Delivery al registrarse
-- [ ] Test de ayuda/guía con las nuevas categorías
+### 1. Sistema de Usuarios
+- 3 roles: Cliente, Mensajero, Conductor (+ Admin)
+- Registro con seleccion de vehiculo para conductores
+- Login con 2FA TOTP (Google Authenticator/Authy)
+- Cambio de contrasena desde cualquier pantalla
+- First-time admin setup (cuando no hay admin en DB)
 
-### Mejoras pendientes
-- [ ] Agregar "Camioneta de Carga" (si aplica para TuRides)
-- [ ] Actualizar tabla comparativa de tarifas en la guía de ayuda con las 4 categorías
-- [ ] Considerar agregar descripción de capacidad por tipo de vehículo en la UI
-- [ ] Revisar si hay otros archivos que mencionen "moto" solamente y necesiten actualizar a los 4 tipos
+### 2. Tipos de Vehiculo (7)
+| Tipo | Tarifa Base | Por Km | Distancia |
+|------|------------|--------|-----------|
+| 🚗 Carro | $1.80 | $0.50/km | Min 2.5 km |
+| 🚙 Camioneta | $4.50 | $0.90/km | Min 2.5 km |
+| 🏍️ Moto | $0.80 | $0.40/km | Min 2.5 km |
+| 🛵 Moto Delivery | $1.80 | $0.55/km | Min 2.5 km |
+| 🚶 Mensajero | $0.50 | $1.00/km | Max 3.0 km |
+| 🛻 Mudanza Pick-Up | $50 | Fijo | 1 ton |
+| 🚛 Mudanza 350 | $100 | Fijo | 3.5 ton |
+| 🚚 Mudanza 750 | $180 | Fijo | 7 ton |
 
-### Deploy
-- Push automático a GitHub → Render deploy
-- Verificar que Render está sirviendo la nueva imagen correctamente
-- Verificar que `/images/logo.png` carga en producción
+### 3. Sistema de Pagos
+- **Billetera RKM:** Pago instantaneo al completar viaje
+- **Pago Movil:** Transferencia bancaria directa al conductor
+- **Efectivo:** Solo para mudanza
+- **Recarga:** Solicitud pendiente de aprobacion del admin
+
+### 4. Recargos por Horario
+- Normal: 5:00 AM - 4:59 PM (sin recargo)
+- Hora Pico: 5:00 PM - 7:59 PM (+25%)
+- Noche: 10:00 PM - 4:59 AM (+20%)
+
+### 5. Sistema de Comisiones
+
+#### Comision por Viaje (Plataforma)
+| Servicio | Comision |
+|----------|----------|
+| Carro, Camioneta, Moto, Moto Delivery, Mensajero | **10%** |
+| Mudanza Pick-Up | **5%** |
+| Mudanza 350 | **10%** |
+| Mudanza 750 | **15%** |
+
+#### Comision por Retiro (Gastos de Plataforma)
+- Configurable por admin (default **10%**)
+- Se aplica al retirar dinero a cuenta bancaria
+- Mudanza: **0%** (ya cobro comision en viaje)
+
+#### Liquidacion en Panel Admin
+- **Comision Viajes** - Total comisiones de operaciones
+- **Comision Retiros** - Total comisiones de retiros
+- **Total Liquidacion** - Suma de ambas
+
+### 6. Panel de Admin
+- Stats: Servicios, Completados, Volumen, Comision Viajes, Comision Retiros, Total Liquidacion
+- Gestion de usuarios (ver lista, billetera, 2FA, rating)
+- Aprobacion/Rechazo de recargas de clientes
+- Aprobacion/Rechazo de retiros de conductores
+- Verificacion de pagos movil
+- Configuracion de tasa BCV
+- Configuracion de cuenta bancaria del admin
+- Reporte diario con print/PDF
+- Backup: manual JSON, Google Drive, 7-day reminder, Neon PITR
+- **Collapse/expand** en secciones de recargas, retiros y viajes (ultimos 5 por defecto)
+
+### 7. Panel del Cliente
+- Busqueda de conductores por tipo de vehiculo
+- Vista activa del viaje en curso
+- Historial de solicitudes (collapse, ultimas 5)
+- Billetera con recarga (modal con datos del admin + solicitud pendiente)
+- Historial de recargas (collapse, ultimas 5)
+- Calificacion de conductores (1-5 estrellas)
+- Seguridad: cambio de contrasena + 2FA
+- **Boton "+"** junto al saldo RKM abre modal de recarga completa
+
+### 8. Panel del Conductor
+- Toggle de disponibilidad
+- Solicitud entrante con aceptar/rechazar
+- Vista del viaje activo con proceso de pago
+- Billetera con retiros (show more, ultimos 3)
+- Configuracion de cuenta bancaria (21 bancos)
+- Calificacion de clientes
+- Seguridad: cambio de contrasena + 2FA
+
+### 9. Panel del Mensajero
+- Similar al conductor pero con dashboard independiente
+- Servicios: Documentos, Paquetes, Botellones, Retiro de Compras
+- Toggle de disponibilidad
+- Solicitud entrante con aceptar/rechazar
+- Billetera con retiros inline
+- Configuracion de cuenta bancaria (26 bancos)
+
+### 10. Mudanza
+- 3 sub-tipos: Pick-Up (1 ton), 350 (3.5 ton), 750 (7 ton)
+- Tarifa fija por tipo
+- 3 metodos de pago: Billetera, Efectivo, Pago Movil
+- Comision de plataforma descontada al conductor
+- Validacion de saldo del conductor para aceptar
+- Admin verifica pagos movil
+
+### 11. Sistema de Notificaciones (Socket.io)
+- `trip:created`, `trip:status_changed`, `trip:new_request`
+- `user:updated` - Actualiza billetera en tiempo real
+- `recharge:created` - Admin recibe notificacion
+- `recharge:approved` - Cliente recibe actualizacion
+- `recharge:updated` - Admin refresca dashboard
+- `withdrawal:created`, `withdrawal:realized`, `withdrawal:rejected`
+- `payment:completed`
+- Conductor polling cada 3s como fallback
+
+### 12. Geolocalizacion
+- Nominatim geocoding + formula Haversine
+- Factor de ruta 1.35
+- Fallback a distancia estimada cuando falla geocoding
+
+### 13. Ayuda/Guia
+- Guia completa en español
+- Soporte print/PDF con boton 🖨️
+- Roles: Cliente, Conductor, Mensajero, Admin
+
+### 14. Logo
+- `images/logo.png` - navbar (32x32), login (120x120), setup
 
 ---
 
-## 📊 Resumen del proyecto
+## Lista de Bancos Oficiales BCV (26)
 
-- **Repositorio:** https://github.com/tecnicowin/turides
-- **Deploy:** https://turides.onrender.com
-- **Base de datos:** PostgreSQL (Neon)
-- **Stack:** Express + Socket.io + PostgreSQL (pg) + SPA vanilla JS
-
-### Estructura de archivos clave
 ```
-D:\TuRides\
-├── server.js          # Backend principal (API, Socket.io, tarifas)
-├── app.js             # Frontend SPA (UI, wallet, admin, ayuda)
-├── index.html         # Vistas HTML (setup, login, admin, registro)
-├── style.css          # Estilos (1500+ líneas, incluye print)
-├── db.js              # Wrapper PostgreSQL (Pool + helpers)
-├── images/
-│   ├── logo.png       # Logo principal (674 KB)
-│   └── 96c06f71.png   # Copia fuente del logo
-├── package.json
-├── render.yaml
-├── .gitignore
-└── BITACORA.md        # Este archivo
+0102 - Banco de Venezuela
+0104 - Venezolano de Credito
+0105 - Mercantil Banco
+0108 - BBVA Provincial
+0114 - Bancaribe
+0115 - Banco Exterior
+0128 - Banco Caroni
+0134 - Banesco
+0137 - Banco Sofitasa
+0138 - Banco Plaza
+0146 - Bangente
+0151 - BFC Banco Fondo Comun
+0156 - 100% Banco
+0157 - DelSur Banco Universal
+0163 - Banco del Tesoro
+0166 - Banco Agricola de Venezuela
+0168 - Bancrecer
+0169 - R4 Banco Microfinanciero
+0171 - Banco Activo
+0172 - Bancamiga
+0173 - Banco Internacional
+0174 - Banplus
+0175 - Banco Digital de Los Trabajadores
+0177 - Banco de la Fuerza Armada
+0178 - N58 Banco Digital
+0191 - Banco Nacional de Credito
 ```
-
-### Variables de entorno en Render
-- `DATABASE_URL` = Neon PostgreSQL connection string
-- `NODE_ENV` = production
 
 ---
 
-## 🔧 Comandos útiles
+## Arquitectura de Archivos
 
-```bash
-# Ver estado de git
-git status
-
-# Commit y push
-git add .; git commit -m "mensaje"; git push
-
-# Ver logs de Render
-# Ir a: https://dashboard.render.com → TuRides → Logs
-
-# Conectar a PostgreSQL directamente (si es necesario)
-# Usar el connection string de Neon en DB Browser o pgAdmin
 ```
+TuRides/
+├── server.js          # Express + Socket.io + PostgreSQL
+├── app.js             # Client SPA (all UI logic)
+├── index.html         # HTML views
+├── style.css          # All styles
+├── db.js              # PostgreSQL pool wrapper
+├── package.json       # Dependencies
+├── render.yaml        # Render build config
+├── .gitignore         # Ignores turides.db, node_modules
+├── BITACORA.md        # Este archivo
+└── images/
+    └── logo.png       # TuRides logo
+```
+
+---
+
+## Variables de Entorno (Render)
+
+- `DATABASE_URL` - Neon PostgreSQL connection string
+- `GOOGLE_DRIVE_CREDENTIALS` - Service Account JSON
+- `GOOGLE_DRIVE_FOLDER_ID` - Folder ID for backups
+
+---
+
+## Base de Datos (PostgreSQL)
+
+### Tablas
+- `users` - Usuarios con roles, billetera, 2FA, bankInfo
+- `trips` - Viajes con orderdetails, platformcommission
+- `transactions` - Transacciones de billetera
+- `config` - Configuracion del admin (BCV rate, bank details)
+- `recharges` - Solicitudes de recarga de clientes
+- `withdrawals` - Solicitudes de retiro de conductores
+
+### Convenciones
+- Todas las columnas en **lowercase** (PostgreSQL requirement)
+- Mapeo a camelCase en JS con `mapRow()` y `USER_MAP`, `TRIP_MAP`, etc.
+- `CREATE TABLE IF NOT EXISTS` (no DROP para preservar datos)
+
+---
+
+## Commits Recientes
+
+```
+4619339 - Lista bancos oficial BCV 26 bancos. Constante BANKS global
+fe7cc00 - Fix: grid-4 to 6 columns for liquidacion cards
+7c7a5df - Liquidacion: desglose comision viajes + retiros + total
+```
+
+---
+
+## Pendiente / Ideas Futuras
+
+- [ ] Notificaciones push (actualmente solo Socket.io)
+- [ ] Mapa en tiempo real de ubicacion del conductor
+- [ ] Sistema de quejas/reclamaciones
+- [ ] Multi-idioma (es/en)
+- [ ] Modo oscuro/claro
+- [ ] App movil (React Native / Flutter)
