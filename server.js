@@ -528,13 +528,15 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
             await dbRun('UPDATE trips SET status = $1, paymentstatus = $2, paymentverifiedat = $3 WHERE id = $4', [status, 'pagado', now, req.params.id]);
         }
     } else if (status === 'aceptado') {
-        if (trip.paymentmethod === 'efectivo' || trip.paymentmethod === 'rkm') {
-            const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+        const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+        const conductorPass = await getPassStatus(trip.conductorid);
+        const hasActivePass = !!conductorPass.activePass;
+        if (!hasActivePass) {
             const isMudanza = trip.orderdetails && trip.orderdetails.subtype && MUDANZA_COMMISSION[trip.orderdetails.subtype];
             const commissionRate = isMudanza ? MUDANZA_COMMISSION[trip.orderdetails.subtype] : PLATFORM_COMMISSION_RATE;
             const commission = parseFloat((trip.price * commissionRate).toFixed(2));
             if (conductor && conductor.balance < commission) {
-                return res.status(400).json({ error: `Saldo insuficiente. Necesitas $${commission.toFixed(2)} para la comision de Plataforma.` });
+                return res.status(400).json({ error: `Saldo insuficiente. Necesitas $${commission.toFixed(2)} para la comision de Plataforma. Recarga tu billetera o adquiere un PASS para generar sin comisiones.` });
             }
         }
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
@@ -1060,10 +1062,12 @@ const PASS_PURCHASES_TO_UNLOCK = 3;
 
 async function getPassStatus(userId) {
     const purchases = await dbAll('SELECT * FROM pass_purchases WHERE userid = $1 ORDER BY createdat ASC', [userId]);
+    const completedPurchases = purchases.filter(p => p.status === 'completado');
+    const pendingPurchases = purchases.filter(p => p.status === 'pendiente');
     const purchasesByLevel = { bronce: 0, plata: 0, oro: 0 };
     let currentLevel = 'bronce';
     let totalSpent = 0;
-    purchases.forEach(p => {
+    completedPurchases.forEach(p => {
         if (purchasesByLevel[p.passlevel] !== undefined) purchasesByLevel[p.passlevel]++;
         totalSpent += p.amount;
     });
@@ -1080,7 +1084,7 @@ async function getPassStatus(userId) {
     const progressToNext = nextLevel ? purchasesInCurrentLevel : PASS_PURCHASES_TO_UNLOCK;
     const referrals = await dbAll('SELECT * FROM referrals WHERE referrerid = $1 AND status = $2', [userId, 'efectivo']);
     const referralCredits = referrals.reduce((acc, r) => acc + (r.commission || REFERRAL_COMMISSION), 0);
-    const lastPurchase = purchases.length > 0 ? purchases[purchases.length - 1] : null;
+    const lastPurchase = completedPurchases.length > 0 ? completedPurchases[completedPurchases.length - 1] : null;
     let activePass = null;
     let earnedWithPass = 0;
     if (lastPurchase) {
@@ -1091,7 +1095,7 @@ async function getPassStatus(userId) {
             activePass = { level: lastPurchase.passlevel, label: tier.label, cost: tier.cost, limit: tier.limit, earned: earnedWithPass, remaining: tier.limit - earnedWithPass, purchasedAt: lastPurchase.createdat };
         }
     }
-    return { currentLevel, nextLevel, purchasesByLevel, progressToNext, purchasesNeeded: nextLevel ? Math.max(0, PASS_PURCHASES_TO_UNLOCK - progressToNext) : 0, referralCredits, totalReferrals: referrals.length, activePass, totalSpent };
+    return { currentLevel, nextLevel, purchasesByLevel, progressToNext, purchasesNeeded: nextLevel ? Math.max(0, PASS_PURCHASES_TO_UNLOCK - progressToNext) : 0, referralCredits, totalReferrals: referrals.length, activePass, totalSpent, pendingPurchases: pendingPurchases.map(p => ({ id: p.id, passlevel: p.passlevel, amount: p.amount, paymentmethod: p.paymentmethod, createdat: p.createdat })) };
 }
 
 // GET - Estado PASS del conductor
@@ -1126,8 +1130,9 @@ app.post('/api/pass/buy', requireAuth, async (req, res) => {
         }
         const id = 'PASS_' + Date.now();
         const now = new Date().toISOString();
+        const passStatus = (paymentMethod === 'pago_movil' && finalAmount > 0) ? 'pendiente' : 'completado';
         await dbRun('INSERT INTO pass_purchases (id, userid, username, passlevel, amount, creditapplied, paymentmethod, status, createdat) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-            [id, req.authUser.id, req.authUser.name || 'Conductor', passLevel, tier.cost, credit, paymentMethod || 'rkm', 'completado', now]);
+            [id, req.authUser.id, req.authUser.name || 'Conductor', passLevel, tier.cost, credit, paymentMethod || 'rkm', passStatus, now]);
         if (credit > 0) {
             const referrals = await dbAll('SELECT * FROM referrals WHERE referrerid = $1 AND status = $2 ORDER BY createdat ASC', [req.authUser.id, 'efectivo']);
             let remaining = credit;
@@ -1145,7 +1150,11 @@ app.post('/api/pass/buy', requireAuth, async (req, res) => {
         }
         const newStatus = await getPassStatus(req.authUser.id);
         io.to('conductor_' + req.authUser.id).emit('pass:updated', newStatus);
-        res.json({ success: true, message: `PASS ${tier.label} activado. Puedes generar hasta $${tier.limit} sin comisiones.`, pass: newStatus });
+        if (passStatus === 'pendiente') {
+            res.json({ success: true, message: `Solicitud de PASS ${tier.label} enviada. Espera verificacion del admin para activar.`, pass: newStatus, pending: true });
+        } else {
+            res.json({ success: true, message: `PASS ${tier.label} activado. Puedes generar hasta $${tier.limit} sin comisiones.`, pass: newStatus });
+        }
     } catch (err) {
         console.error('Pass buy error:', err);
         res.status(500).json({ error: 'Error al comprar PASS' });
@@ -1207,6 +1216,43 @@ io.on('connection', (socket) => {
     console.log('Connected:', socket.id);
     socket.on('join', (room) => { socket.join(room); });
     socket.on('disconnect', () => { console.log('Disconnected:', socket.id); });
+});
+
+// === ADMIN PASS Verification ===
+app.get('/api/admin/pass-pending', requireAdmin, async (req, res) => {
+    try {
+        const pending = await dbAll("SELECT * FROM pass_purchases WHERE status = 'pendiente' ORDER BY createdat ASC");
+        res.json(pending.map(p => ({
+            id: p.id, userId: p.userid, userName: p.username, passLevel: p.passlevel,
+            amount: p.amount, creditApplied: p.creditapplied, paymentMethod: p.paymentmethod,
+            status: p.status, createdAt: p.createdat
+        })));
+    } catch (err) {
+        res.status(500).json({ error: 'Error al obtener PASS pendientes' });
+    }
+});
+
+app.put('/api/admin/pass-verify/:id', requireAdmin, async (req, res) => {
+    try {
+        const { action } = req.body;
+        const purchase = await dbGet('SELECT * FROM pass_purchases WHERE id = $1', [req.params.id]);
+        if (!purchase) return res.status(404).json({ error: 'Compra no encontrada' });
+        if (purchase.status !== 'pendiente') return res.status(400).json({ error: 'Esta compra ya fue procesada' });
+        if (action === 'approve') {
+            await dbRun("UPDATE pass_purchases SET status = 'completado' WHERE id = $1", [req.params.id]);
+            io.to('conductor_' + purchase.userid).emit('pass:approved', { purchaseId: req.params.id, passLevel: purchase.passlevel });
+            res.json({ ok: true, message: `PASS ${purchase.passlevel} aprobado para ${purchase.username}` });
+        } else if (action === 'reject') {
+            await dbRun("UPDATE pass_purchases SET status = 'rechazado' WHERE id = $1", [req.params.id]);
+            io.to('conductor_' + purchase.userid).emit('pass:rejected', { purchaseId: req.params.id, passLevel: purchase.passlevel });
+            res.json({ ok: true, message: `PASS ${purchase.passlevel} rechazado para ${purchase.username}` });
+        } else {
+            res.status(400).json({ error: 'Accion invalida. Usa "approve" o "reject"' });
+        }
+    } catch (err) {
+        console.error('Pass verify error:', err);
+        res.status(500).json({ error: 'Error al verificar PASS' });
+    }
 });
 
 const PORT = process.env.PORT || 3000;

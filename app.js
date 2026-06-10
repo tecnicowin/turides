@@ -236,6 +236,18 @@ const App = {
             this.renderNavbar();
         });
 
+        socket.on('pass:approved', (data) => {
+            if (!this.session) return;
+            this.showToast(`PASS ${data.passLevel} aprobado! Ya esta activo.`, 'success');
+            this.updateViewContent();
+        });
+
+        socket.on('pass:rejected', (data) => {
+            if (!this.session) return;
+            this.showToast(`PASS ${data.passLevel} rechazado. Contacta al admin.`, 'error');
+            this.updateViewContent();
+        });
+
         socket.on('recharge:approved', (data) => {
             if (!this.session) return;
             this.showToast(`Recarga de $${data.amount.toFixed(2)} aprobada!`, 'success');
@@ -1234,6 +1246,18 @@ ${role === 'admin' ? `
                 </div>`;
             }
 
+            if (passStatus.pendingPurchases && passStatus.pendingPurchases.length > 0) {
+                passStatus.pendingPurchases.forEach(p => {
+                    const ptier = PASS_TIERS_CONFIG[p.passlevel];
+                    passHtml += `<div class="p-3 bg-dark rounded mb-3 border-l-yellow">
+                        <div class="flex justify-between items-center">
+                            <div><span class="text-xs text-gray">PASS ${ptier.label} - Pago Movil</span><br><span class="text-xs text-yellow font-bold">⏳ Pendiente de verificacion admin</span><br><span class="text-xs text-gray">${new Date(p.createdat).toLocaleDateString()}</span></div>
+                            <span class="text-sm font-bold text-yellow">$${p.amount.toFixed(2)}</span>
+                        </div>
+                    </div>`;
+                });
+            }
+
             const requiredLevel = passStatus.currentLevel;
             const availablePasses = requiredLevel === 'bronce' ? ['bronce','plata','oro'] : requiredLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
 
@@ -1524,6 +1548,19 @@ ${role === 'admin' ? `
             } else {
                 passHtml += `<div class="p-3 bg-gray rounded mb-3 text-center"><p class="text-sm text-gray">No tienes PASS activo. Adquiere un PASS para generar sin comisiones.</p></div>`;
             }
+
+            if (passStatus.pendingPurchases && passStatus.pendingPurchases.length > 0) {
+                passStatus.pendingPurchases.forEach(p => {
+                    const ptier = PASS_TIERS_CONFIG[p.passlevel];
+                    passHtml += `<div class="p-3 bg-dark rounded mb-3 border-l-yellow">
+                        <div class="flex justify-between items-center">
+                            <div><span class="text-xs text-gray">PASS ${ptier.label} - Pago Movil</span><br><span class="text-xs text-yellow font-bold">⏳ Pendiente de verificacion admin</span><br><span class="text-xs text-gray">${new Date(p.createdat).toLocaleDateString()}</span></div>
+                            <span class="text-sm font-bold text-yellow">$${p.amount.toFixed(2)}</span>
+                        </div>
+                    </div>`;
+                });
+            }
+
             if (passStatus.referralCredits > 0) {
                 passHtml += `<div class="p-3 bg-dark rounded mb-3 border-l-purple"><div class="flex justify-between items-center"><div><span class="text-xs text-gray">Creditos por Referidos</span><br><span class="text-lg font-extrabold text-emerald">$${passStatus.referralCredits.toFixed(2)}</span></div><button onclick="App.openPassBuyModal()" class="btn btn-purple btn-sm" style="font-size:11px;">Aplicar a PASS</button></div></div>`;
             }
@@ -1853,6 +1890,18 @@ ${role === 'admin' ? `
         }
     },
 
+    async adminVerifyPass(purchaseId, action) {
+        const msg = action === 'approve' ? 'aprobar' : 'rechazar';
+        if (!confirm(`¿Confirmar ${msg} este PASS?`)) return;
+        try {
+            await API.put(`/api/admin/pass-verify/${purchaseId}`, { action });
+            this.showToast(`PASS ${action === 'approve' ? 'aprobado' : 'rechazado'} exitosamente.`, 'success');
+            this.renderAdminDashboard();
+        } catch(e) {
+            this.showToast('Error verificando PASS.', 'error');
+        }
+    },
+
     renderAdminSupport(recharges, withdrawals) {
         const container = document.getElementById('admin-support-panel');
         if (!container) return;
@@ -1945,6 +1994,40 @@ ${role === 'admin' ? `
                 html += `</div>`;
                 html += `<div class="text-center mt-2"><button id="admin-withdrawals-extra-toggle" onclick="App.toggleAdminSection('admin-withdrawals-extra')" class="btn btn-sm btn-purple">▼ Mostrar ${hidden.length} retiros mas</button></div>`;
             }
+        }
+        html += `</div></div>`;
+
+        html += `<div class="mt-4"><h3 class="text-lg font-bold mb-3 text-yellow" style="cursor:pointer" onclick="App.toggleAdminSection('admin-pass-body')"><span id="admin-pass-body-toggle">▲</span> 🎫 PASS Pendientes de Verificacion</h3>`;
+        html += `<div id="admin-pass-body">`;
+        try {
+            const pendingPasses = await API.get('/api/admin/pass-pending');
+            if (pendingPasses.length === 0) {
+                html += `<p class="text-center text-gray p-4">No hay PASS pendientes de verificacion.</p>`;
+            } else {
+                pendingPasses.forEach(p => {
+                    const ptier = PASS_TIERS_CONFIG[p.passLevel];
+                    html += `<div class="glass-card mb-3 p-4 border-l-yellow">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="font-bold text-yellow">PASS ${ptier ? ptier.label : p.passLevel}</h4>
+                                <p class="text-xs text-gray">Conductor: <strong>${p.userName}</strong></p>
+                                <p class="text-xs text-gray">ID: ${p.id}</p>
+                            </div>
+                            <span class="text-lg font-extrabold text-emerald">$${p.amount.toFixed(2)}</span>
+                        </div>
+                        <div class="p-2 bg-gray rounded mb-2 text-xs">
+                            <span class="text-gray">Metodo:</span> <strong class="text-cyan">Pago Movil</strong> |
+                            <span class="text-gray">Fecha:</span> <strong>${p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</strong>
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="App.adminVerifyPass('${p.id}', 'approve')" class="btn btn-emerald flex-1">✓ Aprobar PASS</button>
+                            <button onclick="App.adminVerifyPass('${p.id}', 'reject')" class="btn btn-red flex-1">✗ Rechazar</button>
+                        </div>
+                    </div>`;
+                });
+            }
+        } catch(e) {
+            html += `<p class="text-center text-red p-4">Error cargando PASS pendientes.</p>`;
         }
         html += `</div></div>`;
 
