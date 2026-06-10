@@ -1259,7 +1259,7 @@ ${role === 'admin' ? `
             }
 
             const requiredLevel = passStatus.currentLevel;
-            const availablePasses = requiredLevel === 'bronce' ? ['bronce','plata','oro'] : requiredLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
+            const availablePasses = requiredLevel === 'bronce' ? ['bronce'] : requiredLevel === 'plata' ? ['bronce','plata'] : ['bronce','plata','oro'];
 
             passHtml += `<div class="p-3 bg-gray rounded mb-3">
                 <p class="text-xs text-gray mb-1">Progreso ${passStatus.nextLevel ? `hacia ${PASS_TIERS_CONFIG[passStatus.nextLevel]?.label || passStatus.nextLevel}` : 'Nivel Maximo'}</p>
