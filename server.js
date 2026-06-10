@@ -508,6 +508,7 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
             io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
         } else if (trip.paymentmethod === 'pago_movil') {
             await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', ['pago_movil_pendiente', now, req.params.id]);
+            await dbRun('UPDATE users SET available = 1 WHERE id = $1', [trip.conductorid]);
             io.emit('trip:status_changed', parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id])));
         } else {
             await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', [status, now, req.params.id]);

@@ -1081,7 +1081,7 @@ ${role === 'admin' ? `
         const activeContainer = document.getElementById('conductor-active-trip');
         const radarContainer = document.getElementById('conductor-radar-container');
         const trips = await API.get('/api/trips');
-        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
+        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_movil_pendiente', 'pago_verificado'].includes(t.status));
 
         if (activeTrip) {
             radarContainer.style.display = 'none'; activeContainer.style.display = 'block';
@@ -1122,8 +1122,10 @@ ${role === 'admin' ? `
                 } else if (isEfectivo) {
                     html += `<div class="p-3 bg-dark rounded border-l-yellow mb-4 text-center"><p class="text-xs text-yellow font-bold mb-2">💵 Pago en efectivo pendiente.</p><p class="text-sm text-gray">Cobra $${activeTrip.price.toFixed(2)} del cliente en efectivo.</p><p class="text-xs text-gray mt-1">Comision: -$${commission.toFixed(2)} de tu billetera.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Recibido ✓</button>`;
                 } else {
-                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">⏳ Esperando verificacion del admin.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p><p class="text-xs text-gray">El admin verificara el pago movil del cliente.</p></div>`;
+                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">⏳ Pago movil completado.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p><p class="text-xs text-gray">El admin verificara el pago movil del cliente.</p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
                 }
+            } else if (activeTrip.status === 'pago_movil_pendiente') {
+                html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">📱 Pago movil pendiente de verificacion.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p><p class="text-xs text-gray">El admin verificara el pago. Ya puedes calificar y recibir nuevos servicios.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
             } else if (activeTrip.status === 'pago_verificado') {
                 html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago verificado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
             }
@@ -1405,7 +1407,7 @@ ${role === 'admin' ? `
         const activeContainer = document.getElementById('mensajero-active-trip');
         const radarContainer = document.getElementById('mensajero-radar-container');
         const trips = await API.get('/api/trips');
-        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_verificado'].includes(t.status));
+        const activeTrip = trips.find(t => t.conductorId === this.session.id && ['pendiente', 'aceptado', 'completado', 'pago_movil_pendiente', 'pago_verificado'].includes(t.status));
 
         if (activeTrip) {
             radarContainer.style.display = 'none'; activeContainer.style.display = 'block';
@@ -1433,6 +1435,8 @@ ${role === 'admin' ? `
                 html += `<button onclick="App.completeTripByConductor('${activeTrip.id}')" class="btn btn-purple w-full">Entrega Realizada ✓</button>`;
             } else if (activeTrip.status === 'completado') {
                 html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago procesado automaticamente via Billetera TuRides.</p><p class="text-sm text-gray">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> <span class="text-xs">(Bs ${this.toBs(activeTrip.price)})</span></p></div><button onclick="App.confirmPaymentByConductor('${activeTrip.id}')" class="btn btn-emerald w-full">Pago Verificado ✓</button>`;
+            } else if (activeTrip.status === 'pago_movil_pendiente') {
+                html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">📱 Pago movil pendiente de verificacion.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p><p class="text-xs text-gray">El admin verificara el pago. Ya puedes calificar y recibir nuevos envios.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
             } else if (activeTrip.status === 'pago_verificado') {
                 html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">Envio completado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
             }
