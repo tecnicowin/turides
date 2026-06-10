@@ -610,6 +610,182 @@
             line-height: 1.6;
         }
 
+        /* PASS TuRides Featured Card */
+        .pass-featured {
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(6, 182, 212, 0.15));
+            border: 2px solid rgba(124, 58, 237, 0.4);
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            margin-bottom: 2.5rem;
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .pass-featured::before {
+            content: '';
+            position: absolute;
+            top: -60px;
+            right: -60px;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.3), transparent);
+            border-radius: 50%;
+        }
+
+        .pass-featured::after {
+            content: '';
+            position: absolute;
+            bottom: -60px;
+            left: -60px;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.2), transparent);
+            border-radius: 50%;
+        }
+
+        .pass-featured:hover {
+            border-color: rgba(124, 58, 237, 0.7);
+            box-shadow: 0 0 40px rgba(124, 58, 237, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .pass-featured-content { position: relative; z-index: 1; }
+
+        .pass-featured-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #1a1a2e;
+            padding: 0.35rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+        }
+
+        .pass-featured h3 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.75rem;
+        }
+
+        .pass-featured p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            max-width: 550px;
+            margin: 0 auto 1.5rem;
+            line-height: 1.7;
+        }
+
+        .pass-featured-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Info Modal */
+        .info-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 5000;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(16px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .info-overlay.hidden { display: none; }
+
+        .info-modal {
+            background: linear-gradient(145deg, rgba(22, 28, 45, 0.97), rgba(10, 15, 30, 0.99));
+            border: 2px solid rgba(124, 58, 237, 0.4);
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 700px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .info-modal h2 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 1.25rem;
+            text-align: center;
+        }
+
+        .info-modal table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        .info-modal th, .info-modal td {
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 0.85rem;
+        }
+
+        .info-modal th {
+            color: #c084fc;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .info-modal td { color: var(--text-muted); }
+
+        .info-modal .rule-box {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1rem;
+            margin: 0.75rem 0;
+        }
+
+        .info-modal .rule-box h4 {
+            font-size: 0.9rem;
+            color: var(--cyan-light);
+            margin-bottom: 0.4rem;
+        }
+
+        .info-modal .rule-box p {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .info-close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-glass);
+            color: var(--text-main);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .info-close-btn:hover { background: rgba(239, 68, 68, 0.3); }
+
+        .highlight-pass { color: #fbbf24; font-weight: 700; }
+        .highlight-green { color: #34d399; font-weight: 700; }
+
         /* ==================== COMO FUNCIONA ==================== */
         #como-funciona { background: rgba(0, 0, 0, 0.2); }
 
@@ -1213,6 +1389,18 @@
                 <p class="section-subtitle mx-auto">Unete a la plataforma que mas invierte en el crecimiento de sus conductores operarios. Genera ingresos con flexibilidad y libertad.</p>
             </div>
             <div class="benefits-grid">
+                <!-- PASS TuRides DESTACADO -->
+                <div class="pass-featured fade-in" style="grid-column: 1 / -1;">
+                    <div class="pass-featured-content">
+                        <span class="pass-featured-badge">Nuevo Plan de Negocio</span>
+                        <h3>&#x1F3AB; PASS TuRides</h3>
+                        <p><strong class="highlight-pass">100% beneficios para ti, tu decides.</strong> Adquiere un PASS y genera ingresos sin comisiones. Acumula referidos, canjea creditos y escala de nivel. Tu controlas tus ganancias.</p>
+                        <div class="pass-featured-buttons">
+                            <button onclick="openPassInfoModal()" class="btn-hero btn-primary">&#x1F4D6; Conoce los PASS</button>
+                            <button onclick="openReferralInfoModal()" class="btn-hero btn-secondary">&#x1F381; Sistema de Referidos</button>
+                        </div>
+                    </div>
+                </div>
                 <div class="benefit-card fade-in">
                     <div class="benefit-icon">&#x1F4B0;</div>
                     <h3>Tarifas Competitivas</h3>
@@ -1374,6 +1562,122 @@
         &#x1F4AC;
     </a>
 
+    <!-- MODAL PASS TuRides INFO -->
+    <div id="pass-info-modal" class="info-overlay hidden" onclick="if(event.target===this)closePassInfoModal()">
+        <div class="info-modal">
+            <button class="info-close-btn" onclick="closePassInfoModal()">&#x2715;</button>
+            <h2>&#x1F3AB; PASS TuRides</h2>
+            <p style="text-align:center;color:var(--text-muted);font-size:0.9rem;margin-bottom:1.5rem;">Adquiere un PASS para generar <strong style="color:#34d399;">sin comisiones</strong> hasta alcanzar el limite de ganancia. Tu decides cuantas veces renovar.</p>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin-bottom:0.75rem;">Tabla de PASS</h3>
+            <table>
+                <thead>
+                    <tr><th>Nivel</th><th>Costo</th><th>Limite Ganancia</th><th>Relacion</th><th>Beneficio</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><strong>&#x1F949; Bronce</strong></td><td>$10</td><td>$100</td><td>1:10</td><td>Sin comision hasta $100</td></tr>
+                    <tr><td><strong>&#x1F948; Plata</strong></td><td>$20</td><td>$250</td><td>1:12.5</td><td>Sin comision hasta $250</td></tr>
+                    <tr><td><strong>&#x1F947; Oro</strong></td><td><span class="highlight-pass">$50</span></td><td><span class="highlight-green">$700</span></td><td>1:14</td><td>Sin comision hasta $700</td></tr>
+                </tbody>
+            </table>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin:1.5rem 0 0.75rem;">Sistema de Desbloqueo</h3>
+            <div class="rule-box">
+                <h4>&#x1F511; Escala de Niveles</h4>
+                <p>Para subir de nivel debes comprar <strong>3 PASS iguales</strong> a tu nivel actual. Ejemplo: 3 PASS Bronce = desbloqueas Plata.</p>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Nivel</th><th>PASS Necesarios</th><th>Siguiente Nivel</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Bronce</td><td>3 PASS Bronce</td><td>&#x1F948; Plata</td></tr>
+                    <tr><td>Plata</td><td>3 PASS Plata</td><td>&#x1F947; Oro</td></tr>
+                    <tr><td>Oro</td><td>Nivel Maximo &#x2705;</td><td>&#x2014;</td></tr>
+                </tbody>
+            </table>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin:1.5rem 0 0.75rem;">PASS Disponibles segun tu nivel</h3>
+            <div class="rule-box">
+                <p><strong>Bronce</strong>: Puedes comprar Bronce, Plata u Oro<br>
+                <strong>Plata</strong>: Puedes comprar Bronce, Plata u Oro<br>
+                <strong>Oro</strong>: Puedes comprar Plata u Oro</p>
+            </div>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin:1.5rem 0 0.75rem;">Comision por Viaje</h3>
+            <div class="rule-box">
+                <h4>&#x1F4B0; Sin PASS vs Con PASS</h4>
+                <p><strong>Sin PASS:</strong> La plataforma cobra 10% de comision por cada viaje.<br>
+                <strong>Con PASS activo:</strong> Comision del 0%. Generas hasta el limite sin descontar nada.</p>
+            </div>
+
+            <div style="text-align:center;margin-top:1.5rem;">
+                <a href="index.html" class="btn-hero btn-primary">&#x1F4BC; Comprar PASS Ahora</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL SISTEMA DE REFERIDOS INFO -->
+
+    <!-- MODAL SISTEMA DE REFERIDOS INFO -->
+    <div id="referral-info-modal" class="info-overlay hidden" onclick="if(event.target===this)closeReferralInfoModal()">
+        <div class="info-modal">
+            <button class="info-close-btn" onclick="closeReferralInfoModal()">&#x2715;</button>
+            <h2>&#x1F381; Sistema de Referidos TuRides</h2>
+            <p style="text-align:center;color:var(--text-muted);font-size:0.9rem;margin-bottom:1.5rem;">Invita a otros conductores y mensajeros. Gana <strong style="color:#34d399;">$5 por cada referido</strong> que compre un PASS.</p>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin-bottom:0.75rem;">Como Funciona</h3>
+            <table>
+                <thead>
+                    <tr><th>Tu Nivel PASS</th><th>Referido Compra</th><th>Tu Ganancia</th><th>Puede Canjear</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Bronce</td><td>PASS $10+</td><td><span class="highlight-green">$5</span></td><td>Siguiente PASS</td></tr>
+                    <tr><td>Plata</td><td>PASS $10+</td><td><span class="highlight-green">$5</span></td><td>Plata u Oro</td></tr>
+                    <tr><td>Oro</td><td>PASS $10+</td><td><span class="highlight-green">$5</span></td><td>Plata u Oro</td></tr>
+                </tbody>
+            </table>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin:1.5rem 0 0.75rem;">Reglas de Canje</h3>
+            <div class="rule-box">
+                <h4>&#x2705; Uso Parcial</h4>
+                <p>Si tienes <strong>$35</strong> en creditos y compras un PASS de <strong>$20</strong>, usas $20 y te quedan $15 para el proximo PASS.</p>
+            </div>
+            <div class="rule-box">
+                <h4>&#x26A0;&#xFE0F; Saldo Insuficiente</h4>
+                <p>Si tienes <strong>$10</strong> y quieres un PASS de <strong>$20</strong>, no puedes usar creditos. Debes pagar los $20 completos.</p>
+            </div>
+            <div class="rule-box">
+                <h4>&#x1F504; Renovacion</h4>
+                <p>Los creditos solo se pueden usar <strong>cuando tu PASS actual se agota</strong>. No se canjean por dinero en efectivo, solo por PASS.</p>
+            </div>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin:1.5rem 0 0.75rem;">Ejemplo Real</h3>
+            <div class="rule-box">
+                <p>Refieres a <strong>4 conductores</strong> que compran PASS de $10.<br>
+                Ganancia: 4 x $5 = <span class="highlight-green">$20 en creditos</span><br>
+                Compras PASS Plata ($20) usando tus creditos = <strong>$0 de tu bolsillo</strong>.</p>
+            </div>
+
+            <h3 style="color:#c084fc;font-size:1.1rem;margin:1.5rem 0 0.75rem;">Ganancias Potenciales</h3>
+            <table>
+                <thead>
+                    <tr><th>Referidos Activos</th><th>Credito Acumulado</th><th>PASS Gratis</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>2 referidos</td><td>$10</td><td>1 PASS Bronce</td></tr>
+                    <tr><td>4 referidos</td><td>$20</td><td>1 PASS Plata</td></tr>
+                    <tr><td>10 referidos</td><td>$50</td><td>1 PASS Oro</td></tr>
+                    <tr><td>20 referidos</td><td>$100</td><td>2 PASS Oro</td></tr>
+                </tbody>
+            </table>
+
+            <div style="text-align:center;margin-top:1.5rem;">
+                <a href="index.html" class="btn-hero btn-secondary">&#x1F4BC; Ver mi PASS</a>
+            </div>
+        </div>
+    </div>
+
     <!-- SCRIPTS -->
     <script>
         // Navbar scroll effect
@@ -1407,6 +1711,26 @@
                     document.getElementById('navLinks').classList.remove('active');
                 }
             });
+        });
+
+        // PASS & Referral info modals
+        function openPassInfoModal() {
+            document.getElementById('pass-info-modal').classList.remove('hidden');
+        }
+        function closePassInfoModal() {
+            document.getElementById('pass-info-modal').classList.add('hidden');
+        }
+        function openReferralInfoModal() {
+            document.getElementById('referral-info-modal').classList.remove('hidden');
+        }
+        function closeReferralInfoModal() {
+            document.getElementById('referral-info-modal').classList.add('hidden');
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closePassInfoModal();
+                closeReferralInfoModal();
+            }
         });
     </script>
 </body>
