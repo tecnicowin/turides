@@ -44,6 +44,12 @@ const BANKS = [
 ];
 const BANK_NAMES_MAP = Object.fromEntries(BANKS.map(b => [b.code, b.name]));
 
+const PASS_TIERS_CONFIG = {
+    bronce:  { level: 1, cost: 10,  limit: 100, label: 'Bronce', icon: '🥉' },
+    plata:   { level: 2, cost: 20,  limit: 250, label: 'Plata', icon: '🥈' },
+    oro:     { level: 3, cost: 50,  limit: 700, label: 'Oro', icon: '🥇' }
+};
+
 const App = {
     session: null,
     activeView: 'login',
@@ -1193,6 +1199,87 @@ ${role === 'admin' ? `
 
         html += `</div>`;
 
+        // === SECCION PASS TuRides ===
+        try {
+            const passStatus = await API.get('/api/pass/status');
+            const referrals = await API.get('/api/pass/referrals');
+            const currentTier = PASS_TIERS_CONFIG[passStatus.currentLevel] || PASS_TIERS_CONFIG.bronce;
+            const isActive = !!passStatus.activePass;
+            const pctUsed = isActive ? Math.min(100, Math.round((passStatus.activePass.earned / passStatus.activePass.limit) * 100)) : 0;
+            let passHtml = `<div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center gap-2">🎫 PASS TuRides</h3>`;
+
+            if (isActive) {
+                const ap = passStatus.activePass;
+                passHtml += `<div class="pricing-card mb-3" style="border:2px solid ${pctUsed >= 80 ? '#ef4444' : '#10b981'};">
+                    <div class="flex justify-between items-center mb-2">
+                        <div><span class="font-bold">Nivel: <span class="text-purple">${ap.label}</span></span><br><span class="text-xs text-gray">Activado: ${new Date(ap.purchasedAt).toLocaleDateString()}</span></div>
+                        <div class="text-right"><span class="text-xs text-gray">Limite</span><br><span class="text-sm font-bold text-cyan">$${ap.limit}</span></div>
+                    </div>
+                    <div style="width:100%;height:10px;background:rgba(255,255,255,0.1);border-radius:10px;overflow:hidden;">
+                        <div style="width:${pctUsed}%;height:100%;background:${pctUsed >= 80 ? 'linear-gradient(90deg,#ef4444,#dc2626)' : 'linear-gradient(90deg,#10b981,#059669)'};border-radius:10px;transition:width 0.5s;"></div>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <span class="text-xs font-bold text-emerald">$${ap.earned.toFixed(2)} ganados</span>
+                        <span class="text-xs font-bold ${pctUsed >= 80 ? 'text-red' : 'text-cyan'}">$${ap.remaining.toFixed(2)} restantes</span>
+                    </div>
+                    ${pctUsed >= 80 ? `<p class="text-xs text-red font-bold mt-2 text-center">⚠️ Tu PASS esta al ${pctUsed}%. Cuando se agote, compra otro PASS o vuelve al plan normal.</p>` : ''}
+                </div>`;
+            } else {
+                passHtml += `<div class="p-3 bg-gray rounded mb-3 text-center">
+                    <p class="text-sm text-gray">No tienes PASS activo.</p>
+                    <p class="text-xs text-gray mt-1">Adquiere un PASS para generar sin comisiones.</p>
+                </div>`;
+            }
+
+            const requiredLevel = passStatus.currentLevel;
+            const availablePasses = requiredLevel === 'bronce' ? ['bronce','plata','oro'] : requiredLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
+
+            passHtml += `<div class="p-3 bg-gray rounded mb-3">
+                <p class="text-xs text-gray mb-1">Progreso ${passStatus.nextLevel ? `hacia ${PASS_TIERS_CONFIG[passStatus.nextLevel]?.label || passStatus.nextLevel}` : 'Nivel Maximo'}</p>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-bold">${passStatus.progressToNext}/3 PASS ${passStatus.currentLevel === 'bronce' ? 'Bronce' : 'Plata'} comprados</span>
+                    ${passStatus.purchasesNeeded > 0 ? `<span class="badge text-cyan">Faltan ${passStatus.purchasesNeeded}</span>` : '<span class="badge text-emerald">DESBLOQUEADO</span>'}
+                </div>
+            </div>`;
+
+            if (passStatus.referralCredits > 0) {
+                passHtml += `<div class="p-3 bg-dark rounded mb-3 border-l-purple">
+                    <div class="flex justify-between items-center">
+                        <div><span class="text-xs text-gray">Creditos por Referidos</span><br><span class="text-lg font-extrabold text-emerald">$${passStatus.referralCredits.toFixed(2)}</span></div>
+                        <button onclick="App.openPassBuyModal()" class="btn btn-purple btn-sm" style="font-size:11px;">Aplicar a PASS</button>
+                    </div>
+                </div>`;
+            }
+
+            passHtml += `<button onclick="App.openPassBuyModal()" class="btn btn-purple w-full mb-3">🎫 ${isActive ? 'Comprar otro PASS' : 'Adquirir PASS'}</button>`;
+            passHtml += `</div>`;
+
+            // Tabla de Referidos
+            passHtml += `<div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center gap-2">🎁 Mis Referidos <span class="badge text-cyan">${referrals.length}</span></h3>`;
+            if (referrals.length === 0) {
+                passHtml += `<p class="text-center text-gray text-sm p-3">No tienes referidos aun. Comparte tu codigo para ganar $5 por referido.</p>`;
+            } else {
+                passHtml += `<div style="overflow-x:auto;"><table class="table"><thead><tr><th>Nombre</th><th>Fecha</th><th>PASS</th><th>Estado</th><th>Credito</th></tr></thead><tbody>`;
+                referrals.forEach(r => {
+                    const statusBadge = r.status === 'efectivo' ? 'text-emerald' : r.status === 'rechazado' ? 'text-red' : 'text-cyan';
+                    const statusLabel = r.status === 'efectivo' ? 'EFECTIVO' : r.status === 'rechazado' ? 'RECHAZADO' : 'PENDIENTE';
+                    const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-';
+                    passHtml += `<tr><td class="font-bold">${r.referredName || '-'}</td><td class="text-xs">${date}</td><td class="text-xs">$${(r.passAmount || 0).toFixed(0)}</td><td><span class="badge ${statusBadge}" style="font-size:10px;">${statusLabel}</span></td><td class="font-bold text-emerald">$${(r.commission || 0).toFixed(2)}</td></tr>`;
+                });
+                passHtml += `</tbody></table></div>`;
+            }
+
+            const totalCredits = referrals.filter(r => r.status === 'efectivo').reduce((a, r) => a + (r.commission || 0), 0);
+            passHtml += `<div class="p-3 bg-dark rounded mt-2"><div class="flex justify-between"><span class="text-xs text-gray">Creditos Acumulados:</span><span class="font-bold text-emerald">$${totalCredits.toFixed(2)}</span></div></div>`;
+            passHtml += `</div>`;
+
+            html += passHtml;
+        } catch(e) { console.error('PASS section error:', e); }
+
+        html += `</div>`;
+
         html += `
             <div class="glass-card mb-4">
                 <h3 class="text-lg font-bold mb-3">🏦 ${hasBank ? 'Actualizar Cuenta Bancaria' : 'Configurar Cuenta Bancaria'}</h3>
@@ -1403,8 +1490,52 @@ ${role === 'admin' ? `
                     <span class="text-2xl font-extrabold text-emerald">$${this.session.balance.toFixed(2)}</span>
                 </div>
                 <p class="text-xs text-gray mb-2">Bs ${this.toBs(this.session.balance)} | Total ganado: $${totalEarned.toFixed(2)}</p>
-            </div>
-            ${hasBank ? `
+            </div>`;
+
+        // === SECCION PASS TuRides para Mensajero ===
+        try {
+            const passStatus = await API.get('/api/pass/status');
+            const referrals = await API.get('/api/pass/referrals');
+            const currentTier = PASS_TIERS_CONFIG[passStatus.currentLevel] || PASS_TIERS_CONFIG.bronce;
+            const isActive = !!passStatus.activePass;
+            const pctUsed = isActive ? Math.min(100, Math.round((passStatus.activePass.earned / passStatus.activePass.limit) * 100)) : 0;
+            let passHtml = `<div class="glass-card mb-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center gap-2">🎫 PASS TuRides</h3>`;
+            if (isActive) {
+                const ap = passStatus.activePass;
+                passHtml += `<div class="pricing-card mb-3" style="border:2px solid ${pctUsed >= 80 ? '#ef4444' : '#10b981'};">
+                    <div class="flex justify-between items-center mb-2">
+                        <div><span class="font-bold">Nivel: <span class="text-purple">${ap.label}</span></span><br><span class="text-xs text-gray">Activado: ${new Date(ap.purchasedAt).toLocaleDateString()}</span></div>
+                        <div class="text-right"><span class="text-xs text-gray">Limite</span><br><span class="text-sm font-bold text-cyan">$${ap.limit}</span></div>
+                    </div>
+                    <div style="width:100%;height:10px;background:rgba(255,255,255,0.1);border-radius:10px;overflow:hidden;">
+                        <div style="width:${pctUsed}%;height:100%;background:${pctUsed >= 80 ? 'linear-gradient(90deg,#ef4444,#dc2626)' : 'linear-gradient(90deg,#10b981,#059669)'};border-radius:10px;"></div>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <span class="text-xs font-bold text-emerald">$${ap.earned.toFixed(2)} ganados</span>
+                        <span class="text-xs font-bold ${pctUsed >= 80 ? 'text-red' : 'text-cyan'}">$${ap.remaining.toFixed(2)} restantes</span>
+                    </div>
+                    ${pctUsed >= 80 ? `<p class="text-xs text-red font-bold mt-2 text-center">⚠️ Tu PASS esta al ${pctUsed}%. Compra otro PASS o vuelve al plan normal.</p>` : ''}
+                </div>`;
+            } else {
+                passHtml += `<div class="p-3 bg-gray rounded mb-3 text-center"><p class="text-sm text-gray">No tienes PASS activo. Adquiere un PASS para generar sin comisiones.</p></div>`;
+            }
+            if (passStatus.referralCredits > 0) {
+                passHtml += `<div class="p-3 bg-dark rounded mb-3 border-l-purple"><div class="flex justify-between items-center"><div><span class="text-xs text-gray">Creditos por Referidos</span><br><span class="text-lg font-extrabold text-emerald">$${passStatus.referralCredits.toFixed(2)}</span></div><button onclick="App.openPassBuyModal()" class="btn btn-purple btn-sm" style="font-size:11px;">Aplicar a PASS</button></div></div>`;
+            }
+            passHtml += `<button onclick="App.openPassBuyModal()" class="btn btn-purple w-full mb-3">🎫 ${isActive ? 'Comprar otro PASS' : 'Adquirir PASS'}</button></div>`;
+            if (referrals.length > 0) {
+                passHtml += `<div class="glass-card mb-4"><h3 class="text-lg font-bold mb-3">🎁 Mis Referidos <span class="badge text-cyan">${referrals.length}</span></h3>`;
+                passHtml += `<div style="overflow-x:auto;"><table class="table"><thead><tr><th>Nombre</th><th>Fecha</th><th>PASS</th><th>Credito</th></tr></thead><tbody>`;
+                referrals.forEach(r => {
+                    passHtml += `<tr><td class="font-bold">${r.referredName || '-'}</td><td class="text-xs">${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-'}</td><td class="text-xs">$${(r.passAmount || 0).toFixed(0)}</td><td class="font-bold text-emerald">$${(r.commission || 0).toFixed(2)}</td></tr>`;
+                });
+                passHtml += `</tbody></table></div></div>`;
+            }
+            html += passHtml;
+        } catch(e) { console.error('PASS mensajero error:', e); }
+
+            html += `${hasBank ? `
             <div class="glass-card mb-4">
                 <h3 class="text-lg font-bold mb-3">💸 Solicitar Retiro</h3>
                 <div class="form-group">
@@ -2290,6 +2421,113 @@ ${role === 'admin' ? `
         await API.put('/api/config', { withdrawalCommission: String(pct) });
         this.showToast(`Comision actualizada a ${pct}%.`, 'success');
         this.renderAdminDashboard();
+    },
+
+    _selectedPassLevel: 'bronce',
+    _passStatus: null,
+
+    async openPassBuyModal() {
+        this._passStatus = await API.get('/api/pass/status');
+        const s = this._passStatus;
+        const allowed = s.currentLevel === 'bronce' ? ['bronce','plata','oro'] : s.currentLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
+        this._selectedPassLevel = allowed[0];
+        this._renderPassModal(s, allowed);
+        document.getElementById('pass-buy-modal').classList.remove('hidden');
+    },
+
+    closePassBuyModal() {
+        document.getElementById('pass-buy-modal').classList.add('hidden');
+    },
+
+    _renderPassModal(s, allowed) {
+        const content = document.getElementById('pass-buy-content');
+        if (!content) return;
+        const tier = PASS_TIERS_CONFIG[this._selectedPassLevel];
+        const credit = Math.min(s.referralCredits, tier.cost);
+        const toPay = Math.max(0, tier.cost - credit);
+        const session = this.session;
+        const canPayRKM = session.balance >= toPay;
+
+        let html = `<div class="mb-3"><p class="text-xs text-gray">Creditos por referidos: <strong class="text-emerald">$${s.referralCredits.toFixed(2)}</strong></p>
+        <p class="text-xs text-gray">Nivel actual: <strong class="text-purple">${s.currentLevel.toUpperCase()}</strong></p></div>`;
+
+        html += `<div class="payment-methods-grid" style="grid-template-columns:repeat(${allowed.length},1fr);margin-bottom:1rem;">`;
+        allowed.forEach(level => {
+            const t = PASS_TIERS_CONFIG[level];
+            const sel = this._selectedPassLevel === level ? 'selected' : '';
+            html += `<label class="payment-method-option ${sel}" onclick="App._selectPass('${level}')">
+                <input type="radio" name="pass-level" value="${level}" ${sel ? 'checked' : ''}>
+                <span class="pm-icon">${t.icon}</span>
+                <span class="pm-name">PASS ${t.label}</span>
+                <span class="pm-desc">$${t.cost} → hasta $${t.limit}</span>
+            </label>`;
+        });
+        html += `</div>`;
+
+        html += `<div class="p-3 bg-gray rounded mb-3">
+            <div class="flex justify-between mb-1"><span class="text-xs text-gray">PASS ${tier.label}</span><span class="text-xs font-bold">$${tier.cost.toFixed(2)}</span></div>
+            ${credit > 0 ? `<div class="flex justify-between mb-1"><span class="text-xs text-emerald">Credito referidos</span><span class="text-xs font-bold text-emerald">-$${credit.toFixed(2)}</span></div>` : ''}
+            <div class="flex justify-between border-t border-gray pt-1"><span class="text-sm font-bold">A Pagar</span><span class="text-lg font-extrabold text-cyan">$${toPay.toFixed(2)}</span></div>
+        </div>`;
+
+        if (toPay > 0) {
+            html += `<div class="mb-3">
+                <label class="text-xs font-bold text-gray">Metodo de Pago</label>
+                <div class="payment-methods-grid" style="grid-template-columns:1fr 1fr;">
+                    <label class="payment-method-option ${canPayRKM ? 'selected' : ''}" onclick="App._selectedPassPayment='rkm'" data-method="rkm">
+                        <input type="radio" name="pass-payment" value="rkm" ${canPayRKM ? 'checked' : ''}>
+                        <span class="pm-icon">💰</span><span class="pm-name">Billetera</span>
+                        <span class="pm-desc">Saldo: $${session.balance.toFixed(2)}</span>
+                    </label>
+                    <label class="payment-method-option" onclick="App._selectedPassPayment='pago_movil'" data-method="pago_movil">
+                        <input type="radio" name="pass-payment" value="pago_movil">
+                        <span class="pm-icon">📱</span><span class="pm-name">Pago Movil</span>
+                        <span class="pm-desc">Transferencia bancaria</span>
+                    </label>
+                </div>
+            </div>`;
+        }
+
+        const disabled = toPay > 0 && !canPayRKM ? 'disabled' : '';
+        html += `<button onclick="App.buyPass()" class="btn btn-purple w-full" ${disabled}>${toPay > 0 ? `Pagar $${toPay.toFixed(2)} y Activar PASS` : 'Activar PASS Gratis (Creditos)'}</button>`;
+        content.innerHTML = html;
+    },
+
+    _selectPass(level) {
+        this._selectedPassLevel = level;
+        if (this._passStatus) {
+            const allowed = this._passStatus.currentLevel === 'bronce' ? ['bronce','plata','oro'] : this._passStatus.currentLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
+            this._renderPassModal(this._passStatus, allowed);
+        }
+    },
+
+    _selectedPassPayment: 'rkm',
+
+    async buyPass() {
+        const paymentMethod = this._selectedPassPayment || 'rkm';
+        const passStatus = await API.get('/api/pass/status');
+        const tier = PASS_TIERS_CONFIG[this._selectedPassLevel];
+        const credit = Math.min(passStatus.referralCredits, tier.cost);
+        const toPay = Math.max(0, tier.cost - credit);
+
+        if (toPay > 0 && paymentMethod === 'rkm' && this.session.balance < toPay) {
+            this.showToast('Saldo insuficiente en billetera.', 'error');
+            return;
+        }
+
+        const result = await API.post('/api/pass/buy', {
+            passLevel: this._selectedPassLevel,
+            paymentMethod,
+            creditApplied: credit
+        });
+
+        if (result.error) { this.showToast(result.error, 'error'); return; }
+        this.showToast(result.message, 'success');
+        this.closePassBuyModal();
+        this.session = await API.get(`/api/users/${this.session.id}`);
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        this.renderConductorWallet();
+        this.renderNavbar();
     },
 
     logout() {

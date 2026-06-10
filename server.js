@@ -124,6 +124,17 @@ async function initDB() {
             bankinfo TEXT, status TEXT DEFAULT 'pendiente', adminnote TEXT,
             reference TEXT, createdat TEXT, reviewedat TEXT
         )`);
+        await client.query(`CREATE TABLE IF NOT EXISTS pass_purchases (
+            id TEXT PRIMARY KEY, userid TEXT, username TEXT, passlevel TEXT,
+            amount REAL, creditapplied REAL DEFAULT 0, paymentmethod TEXT,
+            status TEXT DEFAULT 'completado', createdat TEXT
+        )`);
+        await client.query(`CREATE TABLE IF NOT EXISTS referrals (
+            id TEXT PRIMARY KEY, referrerid TEXT, referrername TEXT,
+            referredid TEXT, referredname TEXT, referredemail TEXT,
+            passamount REAL DEFAULT 0, commission REAL DEFAULT 5,
+            status TEXT DEFAULT 'pendiente', createdat TEXT
+        )`);
 
         const existingConfig = await client.query('SELECT key FROM config LIMIT 1');
         if (existingConfig.rows.length === 0) {
@@ -428,7 +439,11 @@ app.post('/api/trips', requireAuth, async (req, res) => {
         orderDetailsJson = JSON.stringify({ ...orderDetails, orderId: 'MENS-' + Date.now().toString().slice(-8) });
     }
     let platformCommission = 0;
-    if (orderDetails && orderDetails.subtype && MUDANZA_COMMISSION[orderDetails.subtype]) {
+    const conductorPass = await getPassStatus(conductorId);
+    const hasActivePass = !!conductorPass.activePass;
+    if (hasActivePass) {
+        platformCommission = 0;
+    } else if (orderDetails && orderDetails.subtype && MUDANZA_COMMISSION[orderDetails.subtype]) {
         platformCommission = parseFloat((finalPrice * MUDANZA_COMMISSION[orderDetails.subtype]).toFixed(2));
     } else {
         platformCommission = parseFloat((finalPrice * PLATFORM_COMMISSION_RATE).toFixed(2));
@@ -1007,6 +1022,160 @@ app.post('/api/admin/restore', requireAdmin, express.json({ limit: '10mb' }), as
     } catch (err) {
         console.error('Restore error:', err);
         res.status(500).json({ error: 'Error al restaurar backup' });
+    }
+});
+
+// === PASS TuRides - Constants ===
+const PASS_TIERS = {
+    bronce:  { level: 1, cost: 10,  limit: 100, label: 'Bronce' },
+    plata:   { level: 2, cost: 20,  limit: 250, label: 'Plata' },
+    oro:     { level: 3, cost: 50,  limit: 700, label: 'Oro' }
+};
+const PASS_LEVELS = ['bronce', 'plata', 'oro'];
+const REFERRAL_COMMISSION = 5;
+const PASS_PURCHASES_TO_UNLOCK = 3;
+
+async function getPassStatus(userId) {
+    const purchases = await dbAll('SELECT * FROM pass_purchases WHERE userid = $1 ORDER BY createdat ASC', [userId]);
+    const purchasesByLevel = { bronce: 0, plata: 0, oro: 0 };
+    let currentLevel = 'bronce';
+    let totalSpent = 0;
+    purchases.forEach(p => {
+        if (purchasesByLevel[p.passlevel] !== undefined) purchasesByLevel[p.passlevel]++;
+        totalSpent += p.amount;
+    });
+    if (purchasesByLevel.oro >= PASS_PURCHASES_TO_UNLOCK) currentLevel = 'oro';
+    else if (purchasesByLevel.plata >= PASS_PURCHASES_TO_UNLOCK) currentLevel = 'oro';
+    else if (purchasesByLevel.plata > 0) currentLevel = 'plata';
+    else if (purchasesByLevel.bronce >= PASS_PURCHASES_TO_UNLOCK) currentLevel = 'plata';
+    else if (purchasesByLevel.bronce > 0) currentLevel = 'bronce';
+    const nextLevel = currentLevel === 'oro' ? null : currentLevel === 'plata' ? 'oro' : 'plata';
+    let purchasesInCurrentLevel = 0;
+    if (currentLevel === 'bronce') purchasesInCurrentLevel = purchasesByLevel.bronce;
+    else if (currentLevel === 'plata') purchasesInCurrentLevel = purchasesByLevel.plata;
+    else purchasesInCurrentLevel = purchasesByLevel.oro;
+    const progressToNext = nextLevel ? purchasesInCurrentLevel : PASS_PURCHASES_TO_UNLOCK;
+    const referrals = await dbAll('SELECT * FROM referrals WHERE referrerid = $1 AND status = $2', [userId, 'efectivo']);
+    const referralCredits = referrals.reduce((acc, r) => acc + (r.commission || REFERRAL_COMMISSION), 0);
+    const lastPurchase = purchases.length > 0 ? purchases[purchases.length - 1] : null;
+    let activePass = null;
+    let earnedWithPass = 0;
+    if (lastPurchase) {
+        const tier = PASS_TIERS[lastPurchase.passlevel];
+        const trips = await dbAll('SELECT price FROM trips WHERE conductorid = $1 AND status IN ($2,$3,$4) AND createdat >= $5', [userId, 'completado', 'pago_verificado', 'calificado', lastPurchase.createdat]);
+        earnedWithPass = trips.reduce((acc, t) => acc + t.price, 0);
+        if (earnedWithPass < tier.limit) {
+            activePass = { level: lastPurchase.passlevel, label: tier.label, cost: tier.cost, limit: tier.limit, earned: earnedWithPass, remaining: tier.limit - earnedWithPass, purchasedAt: lastPurchase.createdat };
+        }
+    }
+    return { currentLevel, nextLevel, purchasesByLevel, progressToNext, purchasesNeeded: nextLevel ? Math.max(0, PASS_PURCHASES_TO_UNLOCK - progressToNext) : 0, referralCredits, totalReferrals: referrals.length, activePass, totalSpent };
+}
+
+// GET - Estado PASS del conductor
+app.get('/api/pass/status', requireAuth, async (req, res) => {
+    try {
+        const status = await getPassStatus(req.authUser.id);
+        res.json(status);
+    } catch (err) {
+        console.error('Pass status error:', err);
+        res.status(500).json({ error: 'Error al obtener estado PASS' });
+    }
+});
+
+// POST - Comprar PASS
+app.post('/api/pass/buy', requireAuth, async (req, res) => {
+    try {
+        const { passLevel, paymentMethod, creditApplied } = req.body;
+        if (!PASS_TIERS[passLevel]) return res.status(400).json({ error: 'Nivel PASS invalido' });
+        const tier = PASS_TIERS[passLevel];
+        const status = await getPassStatus(req.authUser.id);
+        const allowed = [];
+        if (status.currentLevel === 'bronce') { allowed.push('bronce', 'plata', 'oro'); }
+        else if (status.currentLevel === 'plata') { allowed.push('bronce', 'plata', 'oro'); }
+        else { allowed.push('plata', 'oro'); }
+        if (!allowed.includes(passLevel)) return res.status(400).json({ error: `No puedes comprar PASS ${tier.label} desde tu nivel actual` });
+        const credit = Math.min(creditApplied || 0, status.referralCredits, tier.cost);
+        const finalAmount = parseFloat((tier.cost - credit).toFixed(2));
+        if (paymentMethod === 'rkm') {
+            const user = await dbGet('SELECT balance FROM users WHERE id = $1', [req.authUser.id]);
+            if (user.balance < finalAmount) return res.status(400).json({ error: `Saldo insuficiente. Necesitas $${finalAmount.toFixed(2)} y tienes $${user.balance.toFixed(2)}` });
+            await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [parseFloat((user.balance - finalAmount).toFixed(2)), req.authUser.id]);
+        }
+        const id = 'PASS_' + Date.now();
+        const now = new Date().toISOString();
+        await dbRun('INSERT INTO pass_purchases (id, userid, username, passlevel, amount, creditapplied, paymentmethod, status, createdat) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+            [id, req.authUser.id, req.authUser.name || 'Conductor', passLevel, tier.cost, credit, paymentMethod || 'rkm', 'completado', now]);
+        if (credit > 0) {
+            const referrals = await dbAll('SELECT * FROM referrals WHERE referrerid = $1 AND status = $2 ORDER BY createdat ASC', [req.authUser.id, 'efectivo']);
+            let remaining = credit;
+            for (const r of referrals) {
+                if (remaining <= 0) break;
+                const deduct = Math.min(r.commission, remaining);
+                const newComm = parseFloat((r.commission - deduct).toFixed(2));
+                remaining = parseFloat((remaining - deduct).toFixed(2));
+                if (newComm <= 0) {
+                    await dbRun('DELETE FROM referrals WHERE id = $1', [r.id]);
+                } else {
+                    await dbRun('UPDATE referrals SET commission = $1 WHERE id = $2', [newComm, r.id]);
+                }
+            }
+        }
+        const newStatus = await getPassStatus(req.authUser.id);
+        io.to('conductor_' + req.authUser.id).emit('pass:updated', newStatus);
+        res.json({ success: true, message: `PASS ${tier.label} activado. Puedes generar hasta $${tier.limit} sin comisiones.`, pass: newStatus });
+    } catch (err) {
+        console.error('Pass buy error:', err);
+        res.status(500).json({ error: 'Error al comprar PASS' });
+    }
+});
+
+// GET - Referidos del conductor
+app.get('/api/pass/referrals', requireAuth, async (req, res) => {
+    try {
+        const referrals = await dbAll('SELECT * FROM referrals WHERE referrerid = $1 ORDER BY createdat DESC', [req.authUser.id]);
+        const mapped = referrals.map(r => ({ id: r.id, referrerId: r.referrerid, referrerName: r.referrername, referredId: r.referredid, referredName: r.referredname, referredEmail: r.referredemail, passAmount: r.passamount, commission: r.commission, status: r.status, createdAt: r.createdat }));
+        res.json(mapped);
+    } catch (err) {
+        console.error('Referrals error:', err);
+        res.status(500).json({ error: 'Error al obtener referidos' });
+    }
+});
+
+// POST - Registrar referido (cuando un conductor/mensajero se registra con codigo)
+app.post('/api/pass/referral/register', requireAuth, async (req, res) => {
+    try {
+        const { referredEmail, referredName } = req.body;
+        if (!referredEmail || !referredName) return res.status(400).json({ error: 'Datos del referido incompletos' });
+        const id = 'REF_' + Date.now();
+        const now = new Date().toISOString();
+        await dbRun('INSERT INTO referrals (id, referrerid, referrername, referredid, referredname, referredemail, passamount, commission, status, createdat) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+            [id, req.authUser.id, req.authUser.name || 'Conductor', '', referredName, referredEmail, 0, REFERRAL_COMMISSION, 'pendiente', now]);
+        res.json({ success: true, message: 'Referido registrado. Se acreditara $5 cuando compre su primer PASS.' });
+    } catch (err) {
+        console.error('Referral register error:', err);
+        res.status(500).json({ error: 'Error al registrar referido' });
+    }
+});
+
+// PUT - Validar referido (admin confirma que compro PASS)
+app.put('/api/pass/referrals/:id/validate', requireAdmin, async (req, res) => {
+    try {
+        const { status, passAmount } = req.body;
+        const referral = await dbGet('SELECT * FROM referrals WHERE id = $1', [req.params.id]);
+        if (!referral) return res.status(404).json({ error: 'Referido no encontrado' });
+        const now = new Date().toISOString();
+        if (status === 'efectivo') {
+            await dbRun('UPDATE referrals SET status = $1, passamount = $2 WHERE id = $3', ['efectivo', passAmount || 10, req.params.id]);
+        } else {
+            await dbRun('UPDATE referrals SET status = $1 WHERE id = $2', [status, req.params.id]);
+        }
+        if (status === 'efectivo') {
+            io.to('conductor_' + referral.referrerid).emit('referral:validated', { referralId: req.params.id, commission: REFERRAL_COMMISSION });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Referral validate error:', err);
+        res.status(500).json({ error: 'Error al validar referido' });
     }
 });
 
