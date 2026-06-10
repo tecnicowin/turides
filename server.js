@@ -348,6 +348,18 @@ app.post('/api/setup/reset', (req, res) => {
     return res.status(403).json({ error: 'Funcion deshabilitada por seguridad.' });
 });
 
+// EMERGENCY: Delete user by email (temporary)
+app.post('/api/emergency-delete-user', async (req, res) => {
+    try {
+        const { email, code } = req.body;
+        if (code !== 'turides-2026-reset') return res.status(403).json({ error: 'Codigo invalido' });
+        await dbRun('DELETE FROM users WHERE email = $1', [email.toLowerCase()]);
+        res.json({ ok: true, message: `Usuario ${email} eliminado` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // === USERS ===
 app.get('/api/users', requireAuth, async (req, res) => {
     const rows = await dbAll('SELECT * FROM users');
