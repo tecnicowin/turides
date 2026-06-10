@@ -1810,7 +1810,7 @@ ${role === 'admin' ? `
 
         this.renderAdminBankConfig(config);
 
-        try { this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
+        try { await this.renderAdminSupport(recharges, withdrawals); } catch(e) { console.error('Support panel error:', e); }
         try { this.renderAdminBackup(); } catch(e) { console.error('Backup panel error:', e); }
 
         const reportDate = document.getElementById('admin-report-date');
@@ -1902,7 +1902,7 @@ ${role === 'admin' ? `
         }
     },
 
-    renderAdminSupport(recharges, withdrawals) {
+    async renderAdminSupport(recharges, withdrawals) {
         const container = document.getElementById('admin-support-panel');
         if (!container) return;
 
