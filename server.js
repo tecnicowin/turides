@@ -848,6 +848,28 @@ app.put('/api/admin/verify-pago-movil/:tripId', requireAdmin, async (req, res) =
     res.json(updatedTrip);
 });
 
+// === ADMIN RESET DATABASE ===
+app.post('/api/admin/reset-db', requireAdmin, async (req, res) => {
+    try {
+        const { confirm } = req.body;
+        if (confirm !== 'BORRAR_TODO') {
+            return res.status(400).json({ error: 'Debes enviar confirm: "BORRAR_TODO"' });
+        }
+        await dbRun('DELETE FROM referrals');
+        await dbRun('DELETE FROM pass_purchases');
+        await dbRun('DELETE FROM withdrawals');
+        await dbRun('DELETE FROM recharges');
+        await dbRun('DELETE FROM transactions');
+        await dbRun('DELETE FROM trips');
+        await dbRun('DELETE FROM config');
+        await dbRun('DELETE FROM users');
+        res.json({ ok: true, message: 'Base de datos borrada completamente.' });
+    } catch (err) {
+        console.error('Reset DB error:', err);
+        res.status(500).json({ error: 'Error al borrar la base de datos' });
+    }
+});
+
 // === BACKUP & RESTORE ===
 app.get('/api/admin/backup/status', requireAdmin, async (req, res) => {
     try {
