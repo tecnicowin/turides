@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TuRides - Conectando Tus Caminos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --purple: #7c3aed;
+            --purple-dark: #6d28d9;
+            --purple-light: #a78bfa;
+            --cyan: #06b6d4;
+            --cyan-light: #22d3ee;
+            --emerald: #10b981;
+            --emerald-light: #34d399;
+            --orange: #f97316;
+            --pink: #ec4899;
+            --bg-dark: #0a0d16;
+            --bg-card: #111827;
+            --bg-card2: rgba(22, 28, 45, 0.7);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --font-heading: 'Outfit', sans-serif;
+            --font-body: 'Plus Jakarta Sans', sans-serif;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            line-height: 1.6;
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.06) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); letter-spacing: -0.02em; }
+
+        a { text-decoration: none; color: inherit; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+        /* ==================== NAVBAR ==================== */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 13, 22, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glass);
+            padding: 0.75rem 0;
+            transition: var(--transition);
+        }
+
+        .navbar.scrolled {
+            padding: 0.5rem 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .navbar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .nav-logo {
+            height: 40px;
+            width: 40px;
+            object-fit: contain;
+            border-radius: 10px;
+        }
+
+        .nav-brand-text {
+            font-family: var(--font-heading);
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #c084fc, #6366f1, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: var(--transition);
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-main);
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--purple), var(--cyan));
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+
+        .nav-links a:hover::after { width: 100%; }
+
+        .nav-cta {
+            background: linear-gradient(135deg, var(--purple), #6366f1);
+            color: white !important;
+            padding: 0.5rem 1.25rem;
+            border-radius: 10px;
+            font-weight: 700;
+            transition: var(--transition);
+        }
+
+        .nav-cta:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 20px rgba(124, 58, 237, 0.4);
+        }
+
+        .nav-cta::after { display: none !important; }
+
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 4px;
+        }
+
+        .hamburger span {
+            width: 25px;
+            height: 2.5px;
+            background: var(--text-main);
+            border-radius: 3px;
+            transition: var(--transition);
+        }
+
+        /* ==================== HERO ==================== */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8rem 1.5rem 4rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.12) 0%, transparent 60%);
+            animation: heroPulse 8s ease-in-out infinite;
+        }
+
+        @keyframes heroPulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 800px;
+        }
+
+        .hero-logo {
+            width: 180px;
+            height: 180px;
+            object-fit: contain;
+            margin: 0 auto 1.5rem;
+            filter: drop-shadow(0 0 30px rgba(124, 58, 237, 0.4));
+            animation: floatLogo 3s ease-in-out infinite;
+        }
+
+        @keyframes floatLogo {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .hero-tagline {
+            font-family: var(--font-heading);
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--cyan-light);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 0.75rem;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 1.25rem;
+            background: linear-gradient(135deg, #f3f4f6, #c084fc, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.7;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-hero {
+            padding: 0.9rem 2rem;
+            border-radius: 12px;
+            font-family: var(--font-heading);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--purple), #6366f1);
+            color: white;
+            box-shadow: 0 4px 20px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(124, 58, 237, 0.5);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid var(--border-glass);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--purple);
+            background: rgba(124, 58, 237, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #25d366, #128c7e);
+            color: white;
+        }
+
+        .btn-whatsapp:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(37, 211, 102, 0.4);
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-glass);
+        }
+
+        .stat-item { text-align: center; }
+
+        .stat-number {
+            font-family: var(--font-heading);
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--emerald-light), var(--cyan-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        /* ==================== SECCIONES GENERALES ==================== */
+        section { padding: 5rem 0; }
+
+        .section-label {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--cyan-light);
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            padding: 0.35rem 1rem;
+            border-radius: 20px;
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+        }
+
+        .section-subtitle {
+            font-size: 1.05rem;
+            color: var(--text-muted);
+            max-width: 650px;
+            line-height: 1.7;
+        }
+
+        .text-center { text-align: center; }
+
+        .mx-auto { margin-left: auto; margin-right: auto; }
+
+        .gradient-text {
+            background: linear-gradient(135deg, var(--purple-light), var(--cyan-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* ==================== MISION Y VISION ==================== */
+        .mission-vision {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .mv-card {
+            background: var(--bg-card2);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 2.5rem;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mv-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .mv-card.mission::before {
+            background: linear-gradient(90deg, var(--purple), var(--purple-light));
+        }
+
+        .mv-card.vision::before {
+            background: linear-gradient(90deg, var(--cyan), var(--emerald));
+        }
+
+        .mv-card:hover {
+            border-color: rgba(124, 58, 237, 0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .mv-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .mission .mv-icon {
+            background: rgba(124, 58, 237, 0.15);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+        }
+
+        .vision .mv-icon {
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        .mv-card h3 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+        }
+
+        .mv-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        /* ==================== SERVICIOS ==================== */
+        #servicios { background: rgba(0, 0, 0, 0.2); }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .services-grid .service-card:nth-child(n+4) {
+            grid-column: span 1;
+        }
+
+        .services-row-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-top: 2rem;
+            max-width: 820px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .service-card {
+            background: var(--bg-card2);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .service-card:hover {
+            border-color: rgba(124, 58, 237, 0.3);
+            transform: translateY(-6px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+        }
+
+        .service-img {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            transition: var(--transition);
+        }
+
+        .service-card:hover .service-img {
+            transform: scale(1.05);
+        }
+
+        .service-img-wrapper {
+            overflow: hidden;
+            position: relative;
+        }
+
+        .service-badge {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.3rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-moto { background: rgba(124, 58, 237, 0.9); color: white; }
+        .badge-carro { background: rgba(6, 182, 212, 0.9); color: white; }
+        .badge-camion { background: rgba(249, 115, 22, 0.9); color: white; }
+        .badge-mensajero { background: rgba(236, 72, 153, 0.9); color: white; }
+        .badge-delivery { background: rgba(16, 185, 129, 0.9); color: white; }
+        .badge-vip { background: linear-gradient(135deg, #f59e0b, #d97706); color: #1a1a2e; }
+
+        .service-body {
+            padding: 1.5rem;
+        }
+
+        .service-body h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .service-body p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .service-features {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .service-features li {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .service-features li span { color: var(--emerald-light); }
+
+        /* ==================== BENEFICIOS ==================== */
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .benefit-card {
+            background: var(--bg-card2);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .benefit-card:hover {
+            border-color: rgba(124, 58, 237, 0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .benefit-icon {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 1.25rem;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(6, 182, 212, 0.1));
+            border: 1px solid rgba(124, 58, 237, 0.2);
+            transition: var(--transition);
+        }
+
+        .benefit-card:hover .benefit-icon {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow: 0 0 25px rgba(124, 58, 237, 0.3);
+        }
+
+        .benefit-card h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .benefit-card p {
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        /* ==================== COMO FUNCIONA ==================== */
+        #como-funciona { background: rgba(0, 0, 0, 0.2); }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+            position: relative;
+        }
+
+        .steps-grid::before {
+            content: '';
+            position: absolute;
+            top: 50px;
+            left: 15%;
+            right: 15%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--purple), var(--cyan), var(--emerald), var(--orange));
+            z-index: 0;
+        }
+
+        .step-card {
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-number {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-heading);
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: white;
+            position: relative;
+        }
+
+        .step-card:nth-child(1) .step-number { background: linear-gradient(135deg, var(--purple), #6366f1); }
+        .step-card:nth-child(2) .step-number { background: linear-gradient(135deg, var(--cyan), #0891b2); }
+        .step-card:nth-child(3) .step-number { background: linear-gradient(135deg, var(--emerald), #059669); }
+        .step-card:nth-child(4) .step-number { background: linear-gradient(135deg, var(--orange), #ea580c); }
+
+        .step-card h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+        }
+
+        .step-card p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        /* ==================== CTA POSTULACION ==================== */
+        .cta-section {
+            padding: 5rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-box {
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(6, 182, 212, 0.1));
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: 24px;
+            padding: 4rem 3rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-box::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.2), transparent);
+            border-radius: 50%;
+        }
+
+        .cta-box::after {
+            content: '';
+            position: absolute;
+            bottom: -100px;
+            left: -100px;
+            width: 250px;
+            height: 250px;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.15), transparent);
+            border-radius: 50%;
+        }
+
+        .cta-content { position: relative; z-index: 1; }
+
+        .cta-content h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+
+        .cta-content p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 2rem;
+            line-height: 1.7;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .store-badges {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        .store-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-glass);
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            transition: var(--transition);
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .store-badge:hover {
+            border-color: var(--purple);
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .store-badge .store-icon { font-size: 1.3rem; }
+
+        /* ==================== CONTACTO ==================== */
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .contact-card {
+            background: var(--bg-card2);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .contact-card:hover {
+            border-color: rgba(124, 58, 237, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .contact-icon {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 1.25rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .contact-card.whatsapp .contact-icon {
+            background: rgba(37, 211, 102, 0.15);
+            border: 1px solid rgba(37, 211, 102, 0.3);
+        }
+
+        .contact-card.web .contact-icon {
+            background: rgba(124, 58, 237, 0.15);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+        }
+
+        .contact-card h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .contact-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .contact-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.7rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            transition: var(--transition);
+        }
+
+        .contact-link.whatsapp-link {
+            background: linear-gradient(135deg, #25d366, #128c7e);
+            color: white;
+        }
+
+        .contact-link.whatsapp-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 211, 102, 0.4);
+        }
+
+        .contact-link.web-link {
+            background: linear-gradient(135deg, var(--purple), #6366f1);
+            color: white;
+        }
+
+        .contact-link.web-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(124, 58, 237, 0.4);
+        }
+
+        /* ==================== FOOTER ==================== */
+        footer {
+            border-top: 1px solid var(--border-glass);
+            padding: 3rem 0 1.5rem;
+            background: rgba(5, 7, 12, 0.6);
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .footer-brand img {
+            height: 30px;
+            width: 30px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+
+        .footer-brand span {
+            font-family: var(--font-heading);
+            font-size: 1.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #c084fc, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .footer-copy {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .footer-socials {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .footer-socials a {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            transition: var(--transition);
+            font-size: 1rem;
+        }
+
+        .footer-socials a:hover {
+            background: rgba(124, 58, 237, 0.15);
+            border-color: rgba(124, 58, 237, 0.3);
+        }
+
+        /* ==================== WHATSAPP FLOAT ==================== */
+        .whatsapp-float {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #25d366, #128c7e);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: white;
+            z-index: 999;
+            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);
+            transition: var(--transition);
+            animation: pulse-wa 2s ease-in-out infinite;
+        }
+
+        .whatsapp-float:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 30px rgba(37, 211, 102, 0.6);
+        }
+
+        @keyframes pulse-wa {
+            0%, 100% { box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4); }
+            50% { box-shadow: 0 4px 30px rgba(37, 211, 102, 0.7); }
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 1024px) {
+            .services-grid { grid-template-columns: repeat(2, 1fr); }
+            .services-grid .service-card:nth-child(n+4) { grid-column: span 1; }
+            .services-row-2 { grid-template-columns: 1fr 1fr; }
+            .benefits-grid { grid-template-columns: repeat(2, 1fr); }
+            .steps-grid { grid-template-columns: repeat(2, 1fr); gap: 2.5rem; }
+            .steps-grid::before { display: none; }
+        }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hamburger { display: flex; }
+
+            .nav-links.active {
+                display: flex;
+                flex-direction: column;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background: rgba(10, 13, 22, 0.98);
+                backdrop-filter: blur(20px);
+                padding: 1.5rem;
+                border-bottom: 1px solid var(--border-glass);
+                gap: 1rem;
+            }
+
+            .hero h1 { font-size: 2.2rem; }
+            .hero p { font-size: 1rem; }
+            .hero-stats { gap: 1.5rem; flex-wrap: wrap; }
+            .stat-number { font-size: 1.5rem; }
+
+            .section-title { font-size: 1.8rem; }
+
+            .mission-vision { grid-template-columns: 1fr; }
+            .services-grid { grid-template-columns: 1fr; }
+            .benefits-grid { grid-template-columns: 1fr; }
+            .steps-grid { grid-template-columns: 1fr; }
+            .contact-grid { grid-template-columns: 1fr; }
+
+            .cta-box { padding: 2.5rem 1.5rem; }
+            .cta-content h2 { font-size: 1.8rem; }
+
+            .footer-content { flex-direction: column; text-align: center; }
+        }
+
+        @media (max-width: 480px) {
+            .hero h1 { font-size: 1.8rem; }
+            .hero-buttons { flex-direction: column; align-items: center; }
+            .btn-hero { width: 100%; justify-content: center; }
+            .store-badges { flex-direction: column; align-items: center; }
+            .cta-buttons { flex-direction: column; align-items: center; }
+        }
+
+        /* ==================== ANIMACIONES SCROLL ==================== */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="#" class="nav-brand">
+                <img src="images/logo.png" alt="TuRides Logo" class="nav-logo">
+                <span class="nav-brand-text">TuRides</span>
+            </a>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#servicios">Servicios</a></li>
+                <li><a href="#beneficios">Beneficios</a></li>
+                <li><a href="#como-funciona">Como Funciona</a></li>
+                <li><a href="#contacto">Contacto</a></li>
+                <li><a href="index.html" class="nav-cta">Entrar a la App</a></li>
+            </ul>
+            <button class="hamburger" id="hamburger" onclick="document.getElementById('navLinks').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero" id="inicio">
+        <div class="hero-content">
+            <img src="images/logo.png" alt="TuRides" class="hero-logo">
+            <p class="hero-tagline">Conectando Tus Caminos</p>
+            <h1>Tu Viaje Seguro, Rapido y al Alcance de tus Manos</h1>
+            <p>Plataforma inteligente de transporte privado y encomiendas. Traslados en carro, moto y carga pesada con tarifas transparentes y pago movil.</p>
+            <div class="hero-buttons">
+                <a href="index.html" class="btn-hero btn-primary">
+                    <span>&#x1F697;</span> Solicitar Servicio
+                </a>
+                <a href="#postulate" class="btn-hero btn-secondary">
+                    <span>&#x1F4BC;</span> Postularse como Conductor
+                </a>
+                <a href="https://wa.me/5804241449747" target="_blank" class="btn-hero btn-whatsapp">
+                    <span>&#x1F4AC;</span> WhatsApp
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="stat-item">
+                    <div class="stat-number">6</div>
+                    <div class="stat-label">Tipos de Servicio</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">24/7</div>
+                    <div class="stat-label">Disponible Siempre</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Seguro y Confiable</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MISION Y VISION -->
+    <section id="mision-vision">
+        <div class="container">
+            <div class="text-center fade-in">
+                <span class="section-label">Nuestra Esencia</span>
+                <h2 class="section-title">Mision y <span class="gradient-text">Vision</span></h2>
+            </div>
+            <div class="mission-vision">
+                <div class="mv-card mission fade-in">
+                    <div class="mv-icon">&#x1F3AF;</div>
+                    <h3>Nuestra Mision</h3>
+                    <p>Conectar personas y negocios a traves de una plataforma de transporte segura, eficiente y accesible, brindando soluciones de movilidad innovadoras que impulsen el crecimiento economico de nuestros conductores operarios y la satisfaccion de nuestros usuarios.</p>
+                </div>
+                <div class="mv-card vision fade-in">
+                    <div class="mv-icon">&#x1F680;</div>
+                    <h3>Nuestra Vision</h3>
+                    <p>Ser la plataforma lider de transporte privado en Latinoamerica, reconocida por nuestra excelencia tecnologica, tarifas justas y el compromiso con el desarrollo sostenible de cada conductor que se una a TuRides. <strong>Conectando tus caminos, ayudandote a crecer.</strong></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SERVICIOS -->
+    <section id="servicios">
+        <div class="container">
+            <div class="text-center fade-in">
+                <span class="section-label">Nuestros Servicios</span>
+                <h2 class="section-title">Soluciones de <span class="gradient-text">Movilidad</span></h2>
+                <p class="section-subtitle mx-auto">Ofrecemos multiples opciones de transporte adaptadas a tus necesidades: desde viajes rapidos en moto hasta mudanzas y carga pesada.</p>
+            </div>
+            <div class="services-grid">
+                <!-- MOTO -->
+                <div class="service-card fade-in">
+                    <div class="service-img-wrapper">
+                        <img src="images/servicio-moto.jpg" alt="Servicio Moto TuRides" class="service-img">
+                        <span class="service-badge badge-moto">Moto</span>
+                    </div>
+                    <div class="service-body">
+                        <h3>&#x1F6F5; Servicio Motorizado</h3>
+                        <p>Rapido, economico y eficiente. Ideal para desplazamientos individuales, delivery de alimentos y paqueteria ligera.</p>
+                        <ul class="service-features">
+                            <li><span>&#x2713;</span> Viajes desde $0.80 + $0.40/km</li>
+                            <li><span>&#x2713;</span> Delivery de documentos y paquetes</li>
+                            <li><span>&#x2713;</span> Rapido en trafico intenso</li>
+                            <li><span>&#x2713;</span> Disponible 24 horas</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- CARRO -->
+                <div class="service-card fade-in">
+                    <div class="service-img-wrapper">
+                        <img src="images/servicio-carro.jpg" alt="Servicio Carro TuRides" class="service-img">
+                        <span class="service-badge badge-carro">Carro</span>
+                    </div>
+                    <div class="service-body">
+                        <h3>&#x1F697; Servicio Vehiculos</h3>
+                        <p>Traslados comodos y seguros en carro particular. Perfecto para viajes urbanos, aeropuerto y viajes largos con maletas.</p>
+                        <ul class="service-features">
+                            <li><span>&#x2713;</span> Viajes desde $1.80 + $0.50/km</li>
+                            <li><span>&#x2713;</span> Capacidad hasta 4 pasajeros</li>
+                            <li><span>&#x2713;</span> Tarifa dinamica por horario</li>
+                            <li><span>&#x2713;</span> Pago en Bs y USD al tasa BCV</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- CAMION -->
+                <div class="service-card fade-in">
+                    <div class="service-img-wrapper">
+                        <img src="images/servicio-camion.jpg" alt="Servicio Carga TuRides" class="service-img">
+                        <span class="service-badge badge-camion">Carga</span>
+                    </div>
+                    <div class="service-body">
+                        <h3>&#x1F69A; Carga Pesada y Mudanzas</h3>
+                        <p>Soluciones completas de transporte de carga con pick-up, camion 350 y camion 750. Mudanzas residenciales y comerciales.</p>
+                        <ul class="service-features">
+                            <li><span>&#x2713;</span> Pick-Up (1 ton) desde $50</li>
+                            <li><span>&#x2713;</span> Camion 350 (3.5 ton) desde $100</li>
+                            <li><span>&#x2713;</span> Camion 750 (7 ton) desde $180</li>
+                            <li><span>&#x2713;</span> Viajes al interior del pais</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- MENSAJERO -->
+                <div class="service-card fade-in">
+                    <div class="service-img-wrapper">
+                        <img src="images/mensajero.png" alt="Servicio Mensajero TuRides" class="service-img">
+                        <span class="service-badge badge-mensajero">Mensajero</span>
+                    </div>
+                    <div class="service-body">
+                        <h3>&#x1F4E9; Mensajeria y Encomiendas</h3>
+                        <p>Servicio de mensajeria para envios cortos de 2km a 4km. Ideal para documentos, sobres, paquetes ligeros y compras express.</p>
+                        <ul class="service-features">
+                            <li><span>&#x2713;</span> Envios de 2km a 4km</li>
+                            <li><span>&#x2713;</span> Documentos, sobres y paquetes</li>
+                            <li><span>&#x2713;</span> Carga menor a 2kg</li>
+                            <li><span>&#x2713;</span> Retiro de compras express</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- DELIVERY -->
+                <div class="service-card fade-in">
+                    <div class="service-img-wrapper">
+                        <img src="images/delivery.png" alt="Servicio Delivery TuRides" class="service-img">
+                        <span class="service-badge badge-delivery">Delivery</span>
+                    </div>
+                    <div class="service-body">
+                        <h3>&#x1F6F5; Delivery Motorizado</h3>
+                        <p>Servicio exclusivo de delivery rapido en moto. Alimentos, farmacia, supermercado y cualquier compra que necesites llevar a tu puerta.</p>
+                        <ul class="service-features">
+                            <li><span>&#x2713;</span> Delivery exclusivo en moto</li>
+                            <li><span>&#x2713;</span> Alimentos, farmacia y compras</li>
+                            <li><span>&#x2713;</span> Rapido y economico</li>
+                            <li><span>&#x2713;</span> Disponible 24/7</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- VIP -->
+                <div class="service-card fade-in">
+                    <div class="service-img-wrapper">
+                        <img src="images/servicio-vip.png" alt="Servicio VIP TuRides" class="service-img">
+                        <span class="service-badge badge-vip">VIP</span>
+                    </div>
+                    <div class="service-body">
+                        <h3>&#x2B50; Servicio VIP</h3>
+                        <p>Servicio de lujo exclusivo para tu familia. Vehiculos premium, conductores profesionales y la maxima comodidad en cada viaje.</p>
+                        <ul class="service-features">
+                            <li><span>&#x2713;</span> Vehiculos de lujo y premium</li>
+                            <li><span>&#x2713;</span> Conductores profesionales certificados</li>
+                            <li><span>&#x2713;</span> Tarifas exclusivas VIP</li>
+                            <li><span>&#x2713;</span> Atencion personalizada para familias</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- BENEFICIOS PARA CONDUCTORES -->
+    <section id="beneficios">
+        <div class="container">
+            <div class="text-center fade-in">
+                <span class="section-label">Para Conductores</span>
+                <h2 class="section-title">Beneficios de ser <span class="gradient-text">Conductor TuRides</span></h2>
+                <p class="section-subtitle mx-auto">Unete a la plataforma que mas invierte en el crecimiento de sus conductores operarios. Genera ingresos con flexibilidad y libertad.</p>
+            </div>
+            <div class="benefits-grid">
+                <div class="benefit-card fade-in">
+                    <div class="benefit-icon">&#x1F4B0;</div>
+                    <h3>Tarifas Competitivas</h3>
+                    <p>Configura tus tarifas por kilometro o tarifa fija. TuRides asegura que las tarifas sean justas para conductores y usuarios.</p>
+                </div>
+                <div class="benefit-card fade-in">
+                    <div class="benefit-icon">&#x1F3AB;</div>
+                    <h3>Trafico de Servicios</h3>
+                    <p>Recibe solicitudes de clientes en tiempo real. Activa tu disponibilidad y empieza a generar ingresos al instante.</p>
+                </div>
+                <div class="benefit-card fade-in">
+                    <div class="benefit-icon">&#x1F381;</div>
+                    <h3>Programa de Referidos</h3>
+                    <p>Invita a otros conductores y clientes. Gana bonificaciones por cada usuario nuevo que se una a la plataforma con tu codigo.</p>
+                </div>
+                <div class="benefit-card fade-in">
+                    <div class="benefit-icon">&#x1F4B3;</div>
+                    <h3>Billetera Digital</h3>
+                    <p>Gana dinero directamente en tu billetera TuRides. Retira a tu cuenta bancaria cuando quieras con comisiones bajas.</p>
+                </div>
+                <div class="benefit-card fade-in">
+                    <div class="benefit-icon">&#x1F4CA;</div>
+                    <h3>Panel de Control</h3>
+                    <p>Visualiza tus ganancias, historial de viajes y calificaciones. Toma el control total de tu negocio de transporte.</p>
+                </div>
+                <div class="benefit-card fade-in">
+                    <div class="benefit-icon">&#x1F512;</div>
+                    <h3>Seguridad 2FA</h3>
+                    <p>Proteccion de cuenta con autenticacion de dos factores. Tu seguridad y la de tus pasajeros es nuestra prioridad.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- COMO FUNCIONA -->
+    <section id="como-funciona">
+        <div class="container">
+            <div class="text-center fade-in">
+                <span class="section-label">Proceso Simple</span>
+                <h2 class="section-title">Como <span class="gradient-text">Funciona</span></h2>
+                <p class="section-subtitle mx-auto">En solo 4 pasos simples puedes empezar a usar TuRides ya sea como cliente o conductor.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card fade-in">
+                    <div class="step-number">1</div>
+                    <h3>Descarga la App</h3>
+                    <p>Descarga TuRides desde la Play Store o App Store, o accede desde tu navegador.</p>
+                </div>
+                <div class="step-card fade-in">
+                    <div class="step-number">2</div>
+                    <h3>Registrate</h3>
+                    <p>Crea tu cuenta como cliente o postulate como conductor con tus datos y vehiculo.</p>
+                </div>
+                <div class="step-card fade-in">
+                    <div class="step-number">3</div>
+                    <h3>Solicita o Acepta</h3>
+                    <p>Los clientes solicitan viajes y los conductores aceptan las solicitudes en tiempo real.</p>
+                </div>
+                <div class="step-card fade-in">
+                    <div class="step-number">4</div>
+                    <h3>Viaja y Cobra</h3>
+                    <p>Completa el servicio, recibe tu pago en la billetera y retira cuando necesites.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA POSTULACION -->
+    <section id="postulate" class="cta-section">
+        <div class="container">
+            <div class="cta-box fade-in">
+                <div class="cta-content">
+                    <h2>&#x1F4BC; <span class="gradient-text">Postulate Ahora</span> como Conductor</h2>
+                    <p>Unete a TuRides y empieza a generar ingresos con tu vehiculo. Trafico constante de servicios, tarifas competitivas y un programa de referidos que te recompensa.</p>
+                    <div class="cta-buttons">
+                        <a href="index.html" class="btn-hero btn-primary">
+                            &#x1F447; Descargar / Abrir App
+                        </a>
+                        <a href="https://wa.me/5804241449747?text=Hola%2C%20quiero%20informacion%20para%20ser%20conductor%20TuRides" target="_blank" class="btn-hero btn-whatsapp">
+                            &#x1F4AC; Mas Info por WhatsApp
+                        </a>
+                    </div>
+                    <div class="store-badges">
+                        <a href="#" class="store-badge">
+                            <span class="store-icon">&#x1F4F1;</span>
+                            <div>
+                                <div style="font-size:0.65rem;color:var(--text-muted);line-height:1;">Disponible en</div>
+                                <div>Google Play</div>
+                            </div>
+                        </a>
+                        <a href="#" class="store-badge">
+                            <span class="store-icon">&#x1F4F1;</span>
+                            <div>
+                                <div style="font-size:0.65rem;color:var(--text-muted);line-height:1;">Descargar en</div>
+                                <div>App Store</div>
+                            </div>
+                        </a>
+                        <a href="index.html" class="store-badge">
+                            <span class="store-icon">&#x1F310;</span>
+                            <div>
+                                <div style="font-size:0.65rem;color:var(--text-muted);line-height:1;">Usar desde</div>
+                                <div>Navegador Web</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTACTO -->
+    <section id="contacto">
+        <div class="container">
+            <div class="text-center fade-in">
+                <span class="section-label">Contacto</span>
+                <h2 class="section-title">Estamos <span class="gradient-text">Para Ti</span></h2>
+                <p class="section-subtitle mx-auto">Tienes dudas, sugerencias o quieres unirte a nuestro equipo? Contactanos directamente.</p>
+            </div>
+            <div class="contact-grid">
+                <div class="contact-card whatsapp fade-in">
+                    <div class="contact-icon">&#x1F4AC;</div>
+                    <h3>WhatsApp</h3>
+                    <p>Atencion inmediata para consultas, postulaciones y soporte tecnico.</p>
+                    <a href="https://wa.me/5804241449747" target="_blank" class="contact-link whatsapp-link">
+                        &#x1F4F1; +58 0424-1449747
+                    </a>
+                </div>
+                <div class="contact-card web fade-in">
+                    <div class="contact-icon">&#x1F310;</div>
+                    <h3>Plataforma Web</h3>
+                    <p>Accede a TuRides desde tu navegador, sin necesidad de descargar nada.</p>
+                    <a href="https://turides.onrender.com" target="_blank" class="contact-link web-link">
+                        &#x1F310; turides.onrender.com
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <img src="images/logo.png" alt="TuRides">
+                    <span>TuRides</span>
+                </div>
+                <p class="footer-copy">&copy; 2026 TuRides Inc. Todos los derechos reservados.</p>
+                <div class="footer-socials">
+                    <a href="https://wa.me/5804241449747" target="_blank" title="WhatsApp">&#x1F4AC;</a>
+                    <a href="https://turides.onrender.com" target="_blank" title="Plataforma">&#x1F310;</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- WHATSAPP FLOTANTE -->
+    <a href="https://wa.me/5804241449747?text=Hola%2C%20necesito%20informacion%20sobre%20TuRides" target="_blank" class="whatsapp-float" title="Contactanos por WhatsApp">
+        &#x1F4AC;
+    </a>
+
+    <!-- SCRIPTS -->
+    <script>
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const navbar = document.getElementById('navbar');
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+        });
+
+        // Scroll animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+        document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+        // Smooth scroll for nav links
+        document.querySelectorAll('.nav-links a[href^="#"]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = document.querySelector(link.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    document.getElementById('navLinks').classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

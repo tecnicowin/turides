@@ -20,6 +20,11 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// Redirigir la raiz a la landing page
+app.get('/', (req, res) => {
+    res.redirect('/landing.html');
+});
+
 const SEED_CONFIG = {
     bankName: 'Banco de Venezuela',
     accountNumber: '0102-0000-0000-0000-0000',
