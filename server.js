@@ -870,28 +870,6 @@ app.post('/api/admin/reset-db', requireAdmin, async (req, res) => {
     }
 });
 
-// === EMERGENCY RESET (no auth, secret code required) ===
-app.post('/api/emergency-reset', async (req, res) => {
-    try {
-        const { code } = req.body;
-        if (code !== 'turides-2026-reset') {
-            return res.status(403).json({ error: 'Codigo invalido' });
-        }
-        await dbRun('DELETE FROM referrals');
-        await dbRun('DELETE FROM pass_purchases');
-        await dbRun('DELETE FROM withdrawals');
-        await dbRun('DELETE FROM recharges');
-        await dbRun('DELETE FROM transactions');
-        await dbRun('DELETE FROM trips');
-        await dbRun('DELETE FROM config');
-        await dbRun('DELETE FROM users');
-        res.json({ ok: true, message: 'Base de datos borrada. Ya puedes crear el admin.' });
-    } catch (err) {
-        console.error('Emergency reset error:', err);
-        res.status(500).json({ error: 'Error al borrar la base de datos' });
-    }
-});
-
 // === BACKUP & RESTORE ===
 app.get('/api/admin/backup/status', requireAdmin, async (req, res) => {
     try {
