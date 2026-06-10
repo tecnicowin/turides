@@ -18,12 +18,13 @@ const io = new Server(server, {
 });
 
 app.use(express.json());
-app.use(express.static(__dirname));
 
-// Redirigir la raiz a la landing page
+// Redirigir la raiz a la landing page (ANTES de static para priorizar)
 app.get('/', (req, res) => {
     res.redirect('/landing.html');
 });
+
+app.use(express.static(__dirname));
 
 const SEED_CONFIG = {
     bankName: 'Banco de Venezuela',
