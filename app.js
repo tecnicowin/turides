@@ -2429,7 +2429,7 @@ ${role === 'admin' ? `
     async openPassBuyModal() {
         this._passStatus = await API.get('/api/pass/status');
         const s = this._passStatus;
-        const allowed = s.currentLevel === 'bronce' ? ['bronce','plata','oro'] : s.currentLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
+        const allowed = s.currentLevel === 'bronce' ? ['bronce'] : s.currentLevel === 'plata' ? ['bronce','plata'] : ['bronce','plata','oro'];
         this._selectedPassLevel = allowed[0];
         this._renderPassModal(s, allowed);
         document.getElementById('pass-buy-modal').classList.remove('hidden');
@@ -2496,7 +2496,7 @@ ${role === 'admin' ? `
     _selectPass(level) {
         this._selectedPassLevel = level;
         if (this._passStatus) {
-            const allowed = this._passStatus.currentLevel === 'bronce' ? ['bronce','plata','oro'] : this._passStatus.currentLevel === 'plata' ? ['bronce','plata','oro'] : ['plata','oro'];
+            const allowed = this._passStatus.currentLevel === 'bronce' ? ['bronce'] : this._passStatus.currentLevel === 'plata' ? ['bronce','plata'] : ['bronce','plata','oro'];
             this._renderPassModal(this._passStatus, allowed);
         }
     },

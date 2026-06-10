@@ -1090,9 +1090,9 @@ app.post('/api/pass/buy', requireAuth, async (req, res) => {
         const tier = PASS_TIERS[passLevel];
         const status = await getPassStatus(req.authUser.id);
         const allowed = [];
-        if (status.currentLevel === 'bronce') { allowed.push('bronce', 'plata', 'oro'); }
-        else if (status.currentLevel === 'plata') { allowed.push('bronce', 'plata', 'oro'); }
-        else { allowed.push('plata', 'oro'); }
+        if (status.currentLevel === 'bronce') { allowed.push('bronce'); }
+        else if (status.currentLevel === 'plata') { allowed.push('bronce', 'plata'); }
+        else { allowed.push('bronce', 'plata', 'oro'); }
         if (!allowed.includes(passLevel)) return res.status(400).json({ error: `No puedes comprar PASS ${tier.label} desde tu nivel actual` });
         const credit = Math.min(creditApplied || 0, status.referralCredits, tier.cost);
         const finalAmount = parseFloat((tier.cost - credit).toFixed(2));
