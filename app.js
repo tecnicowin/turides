@@ -2435,6 +2435,7 @@ ${role === 'admin' ? `
         const s = this._passStatus;
         const allowed = s.currentLevel === 'bronce' ? ['bronce'] : s.currentLevel === 'plata' ? ['bronce','plata'] : ['bronce','plata','oro'];
         this._selectedPassLevel = allowed[0];
+        this._selectedPassPayment = this.session.balance > 0 ? 'rkm' : 'pago_movil';
         this._renderPassModal(s, allowed);
         document.getElementById('pass-buy-modal').classList.remove('hidden');
     },
@@ -2492,7 +2493,7 @@ ${role === 'admin' ? `
             </div>`;
         }
 
-        const disabled = toPay > 0 && !canPayRKM ? 'disabled' : '';
+        const disabled = toPay > 0 && !canPayRKM && this._selectedPassPayment !== 'pago_movil' ? 'disabled' : '';
         html += `<button onclick="App.buyPass()" class="btn btn-purple w-full" ${disabled}>${toPay > 0 ? `Pagar $${toPay.toFixed(2)} y Activar PASS` : 'Activar PASS Gratis (Creditos)'}</button>`;
         content.innerHTML = html;
     },
