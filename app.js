@@ -1473,12 +1473,32 @@ ${role === 'admin' ? `
             </div>`;
 
         if (hasBank) {
+            let wConfig = { withdrawalCommission: '10' };
+            try { wConfig = await API.get('/api/config'); } catch(e) {}
+            const wCommPct = wConfig.withdrawalCommission || '10';
+            this._withdrawalCommPct = parseFloat(wCommPct) || 10;
             html += `
                 <div class="glass-card mb-4">
                     <h3 class="text-lg font-bold mb-3">💸 Solicitar Retiro</h3>
+                    <div class="pricing-card flex justify-between items-center mb-3">
+                        <span class="font-bold text-sm">Saldo disponible a retirar</span>
+                        <div class="text-right">
+                            <span class="text-xl font-extrabold text-emerald" id="withdraw-available">$${this.session.balance.toFixed(2)}</span><br>
+                            <span class="text-xs text-gray" id="withdraw-available-bs">Bs ${this.toBs(this.session.balance)}</span>
+                        </div>
+                    </div>
+                    <div class="withdraw-presets mb-3" style="display:flex;gap:0.4rem;">
+                        <button class="tip-preset" onclick="App.setWithdrawPct(100)" style="flex:1">100%</button>
+                        <button class="tip-preset" onclick="App.setWithdrawPct(50)" style="flex:1">50%</button>
+                        <button class="tip-preset" onclick="App.setWithdrawPct(0)" style="flex:1">Retirar Todo</button>
+                    </div>
                     <div class="form-group">
                         <label>Monto a retirar ($)</label>
-                        <input type="number" id="withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 20.00" class="input">
+                        <input type="number" id="withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 20.00" class="input" oninput="App.updateWithdrawPreview()">
+                    </div>
+                    <div id="withdraw-preview" class="p-2 bg-gray rounded mb-3" style="display:none">
+                        <div class="flex justify-between text-xs"><span class="text-gray">Comision retiro (${wCommPct}%):</span><span class="text-yellow font-bold" id="withdraw-commission">-$0.00</span></div>
+                        <div class="flex justify-between text-xs mt-1"><span class="text-gray">Recibiras:</span><span class="text-emerald font-bold" id="withdraw-net">$0.00</span></div>
                     </div>
                     <button onclick="App.requestWithdrawal()" class="btn btn-emerald w-full">Solicitar Retiro a Cuenta Bancaria</button>
                 </div>`;
@@ -1564,6 +1584,65 @@ ${role === 'admin' ? `
         localStorage.setItem('turides_session', JSON.stringify(this.session));
         this.renderNavbar();
         this.renderConductorWallet();
+    },
+
+    setWithdrawPct(pct) {
+        const balance = this.session.balance || 0;
+        let amount = 0;
+        if (pct === 0) {
+            amount = balance;
+        } else {
+            amount = parseFloat((balance * pct / 100).toFixed(2));
+        }
+        const input = document.getElementById('withdraw-amount') || document.getElementById('mensajero-withdraw-amount');
+        if (input) {
+            input.value = amount > 0 ? amount : '';
+            if (input.id === 'mensajero-withdraw-amount') {
+                this.updateMensajeroWithdrawPreview();
+            } else {
+                this.updateWithdrawPreview();
+            }
+        }
+        const container = input?.closest('.glass-card');
+        if (container) {
+            container.querySelectorAll('.withdraw-presets .tip-preset').forEach(b => {
+                const bPct = b.textContent.includes('100') ? 100 : b.textContent.includes('50') ? 50 : 0;
+                b.classList.toggle('active', bPct === pct);
+            });
+        }
+    },
+
+    updateWithdrawPreview() {
+        const amount = parseFloat(document.getElementById('withdraw-amount')?.value) || 0;
+        const preview = document.getElementById('withdraw-preview');
+        const commEl = document.getElementById('withdraw-commission');
+        const netEl = document.getElementById('withdraw-net');
+        if (amount > 0 && preview) {
+            const pct = this._withdrawalCommPct || 10;
+            const commission = parseFloat((amount * pct / 100).toFixed(2));
+            const net = parseFloat((amount - commission).toFixed(2));
+            preview.style.display = 'block';
+            commEl.textContent = `-$${commission.toFixed(2)}`;
+            netEl.textContent = `$${net.toFixed(2)}`;
+        } else if (preview) {
+            preview.style.display = 'none';
+        }
+    },
+
+    updateMensajeroWithdrawPreview() {
+        const amount = parseFloat(document.getElementById('mensajero-withdraw-amount')?.value) || 0;
+        const preview = document.getElementById('mensajero-withdraw-preview');
+        const commEl = document.getElementById('mensajero-withdraw-commission');
+        const netEl = document.getElementById('mensajero-withdraw-net');
+        if (amount > 0 && preview) {
+            const commission = 0;
+            const net = amount;
+            preview.style.display = 'block';
+            commEl.textContent = `-$${commission.toFixed(2)}`;
+            netEl.textContent = `$${net.toFixed(2)}`;
+        } else if (preview) {
+            preview.style.display = 'none';
+        }
     },
 
     async renderMensajeroDashboard() {
@@ -1721,9 +1800,25 @@ ${role === 'admin' ? `
             html += `${hasBank ? `
             <div class="glass-card mb-4">
                 <h3 class="text-lg font-bold mb-3">💸 Solicitar Retiro</h3>
+                <div class="pricing-card flex justify-between items-center mb-3">
+                    <span class="font-bold text-sm">Saldo disponible a retirar</span>
+                    <div class="text-right">
+                        <span class="text-xl font-extrabold text-emerald" id="withdraw-available">$${this.session.balance.toFixed(2)}</span><br>
+                        <span class="text-xs text-gray" id="withdraw-available-bs">Bs ${this.toBs(this.session.balance)}</span>
+                    </div>
+                </div>
+                <div class="withdraw-presets mb-3" style="display:flex;gap:0.4rem;">
+                    <button class="tip-preset" onclick="App.setWithdrawPct(100)" style="flex:1">100%</button>
+                    <button class="tip-preset" onclick="App.setWithdrawPct(50)" style="flex:1">50%</button>
+                    <button class="tip-preset" onclick="App.setWithdrawPct(0)" style="flex:1">Retirar Todo</button>
+                </div>
                 <div class="form-group">
                     <label>Monto a retirar ($)</label>
-                    <input type="number" id="mensajero-withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 10.00" class="input">
+                    <input type="number" id="mensajero-withdraw-amount" min="1" step="0.01" max="${this.session.balance}" placeholder="Ej. 10.00" class="input" oninput="App.updateMensajeroWithdrawPreview()">
+                </div>
+                <div id="mensajero-withdraw-preview" class="p-2 bg-gray rounded mb-3" style="display:none">
+                    <div class="flex justify-between text-xs"><span class="text-gray">Comision retiro (0%):</span><span class="text-yellow font-bold" id="mensajero-withdraw-commission">-$0.00</span></div>
+                    <div class="flex justify-between text-xs mt-1"><span class="text-gray">Recibiras:</span><span class="text-emerald font-bold" id="mensajero-withdraw-net">$0.00</span></div>
                 </div>
                 <button onclick="App.requestMensajeroWithdrawal()" class="btn btn-emerald w-full">Solicitar Retiro a Cuenta Bancaria</button>
             </div>` : `<div class="glass-card mb-4"><p class="text-xs text-red text-center">Configura tu cuenta bancaria para solicitar retiros.</p></div>`}
@@ -1777,7 +1872,9 @@ ${role === 'admin' ? `
         if (result.error) { this.showToast(result.error, 'error'); return; }
         this.showToast('Retiro solicitado. Pendiente de aprobacion.', 'success');
         this.session = await API.get(`/api/users/${this.session.id}`);
-        this.renderMensajeroDashboard();
+        localStorage.setItem('turides_session', JSON.stringify(this.session));
+        this.renderNavbar();
+        this.renderMensajeroWallet();
     },
 
     async saveMensajeroBankInfo() {
