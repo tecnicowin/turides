@@ -1135,11 +1135,8 @@ ${role === 'admin' ? `
                 this.showToast(`Saldo insuficiente. Necesitas $${total.toFixed(2)} (servicio + propina).`, 'error');
                 return;
             }
-            const result = await API.post('/api/payments/rkm', { tripId });
-            if (result.error) { this.showToast(result.error, 'error'); return; }
-            this.session = await API.get(`/api/users/${this.session.id}`);
-            localStorage.setItem('turides_session', JSON.stringify(this.session));
-            this.showToast('Pago procesado exitosamente con RKM.', 'success');
+            await API.put(`/api/trips/${tripId}/status`, { status: 'completado' });
+            this.showToast('Viaje finalizado. El pago se transferira al calificar.', 'success');
         } else {
             const phone = document.getElementById('pm-phone').value.trim();
             const bank = document.getElementById('pm-bank').value;
