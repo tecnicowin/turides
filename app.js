@@ -358,7 +358,7 @@ const App = {
         this.updateViewContent();
     },
 
-    renderNavbar() {
+    async renderNavbar() {
         const nav = document.getElementById('main-nav');
         if (!this.session) { nav.style.display = 'none'; return; }
         nav.style.display = 'flex';
@@ -372,15 +372,52 @@ const App = {
             rkmSpan.style.display = 'inline-flex';
             document.getElementById('nav-rkm-amount').textContent = `$${this.session.balance.toFixed(2)}`;
             document.getElementById('nav-rkm-amount-bs').textContent = `Bs ${this.toBs(this.session.balance)}`;
+            document.getElementById('nav-pass-status').style.display = 'none';
         } else if (this.session.role === 'conductor') {
             balanceSpan.style.display = 'inline-block';
             balanceSpan.innerHTML = `Billetera: <strong class="text-emerald">$${this.session.balance.toFixed(2)}</strong> <span class="text-xs text-gray">(Bs ${this.toBs(this.session.balance)})</span>`;
             rkmSpan.classList.add('hidden');
             rkmSpan.style.display = 'none';
+            const passSpan = document.getElementById('nav-pass-status');
+            try {
+                const passStatus = await API.get('/api/pass/status');
+                if (passStatus.activePass) {
+                    const ap = passStatus.activePass;
+                    const pct = Math.min(100, Math.round((ap.earned / ap.limit) * 100));
+                    const colorClass = pct <= 30 ? 'pass-green' : pct <= 60 ? 'pass-yellow' : 'pass-red';
+                    const textColor = pct <= 30 ? 'text-emerald' : pct <= 60 ? 'text-yellow' : 'text-red';
+                    passSpan.className = `nav-pass ${colorClass}`;
+                    passSpan.innerHTML = `🎫 PASS: <strong class="${textColor}">$${ap.earned.toFixed(2)}</strong> <span class="text-xs text-gray">/ $${ap.limit.toFixed(2)}</span>`;
+                    passSpan.style.display = 'inline-block';
+                } else {
+                    passSpan.style.display = 'none';
+                }
+            } catch(e) { passSpan.style.display = 'none'; }
+        } else if (this.session.role === 'mensajero') {
+            balanceSpan.style.display = 'inline-block';
+            balanceSpan.innerHTML = `Billetera: <strong class="text-emerald">$${this.session.balance.toFixed(2)}</strong> <span class="text-xs text-gray">(Bs ${this.toBs(this.session.balance)})</span>`;
+            rkmSpan.classList.add('hidden');
+            rkmSpan.style.display = 'none';
+            const passSpan = document.getElementById('nav-pass-status');
+            try {
+                const passStatus = await API.get('/api/pass/status');
+                if (passStatus.activePass) {
+                    const ap = passStatus.activePass;
+                    const pct = Math.min(100, Math.round((ap.earned / ap.limit) * 100));
+                    const colorClass = pct <= 30 ? 'pass-green' : pct <= 60 ? 'pass-yellow' : 'pass-red';
+                    const textColor = pct <= 30 ? 'text-emerald' : pct <= 60 ? 'text-yellow' : 'text-red';
+                    passSpan.className = `nav-pass ${colorClass}`;
+                    passSpan.innerHTML = `🎫 PASS: <strong class="${textColor}">$${ap.earned.toFixed(2)}</strong> <span class="text-xs text-gray">/ $${ap.limit.toFixed(2)}</span>`;
+                    passSpan.style.display = 'inline-block';
+                } else {
+                    passSpan.style.display = 'none';
+                }
+            } catch(e) { passSpan.style.display = 'none'; }
         } else {
             balanceSpan.style.display = 'none';
             rkmSpan.classList.add('hidden');
             rkmSpan.style.display = 'none';
+            document.getElementById('nav-pass-status').style.display = 'none';
         }
 
         const fareLabel = document.getElementById('nav-fare-indicator');

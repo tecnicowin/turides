@@ -256,6 +256,29 @@ label {
     border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
+.nav-pass {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 20px;
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    background-color: rgba(251, 191, 36, 0.1);
+}
+
+.nav-pass.pass-green {
+    border-color: rgba(52, 211, 153, 0.3);
+    background-color: rgba(52, 211, 153, 0.1);
+}
+
+.nav-pass.pass-yellow {
+    border-color: rgba(251, 191, 36, 0.3);
+    background-color: rgba(251, 191, 36, 0.1);
+}
+
+.nav-pass.pass-red {
+    border-color: rgba(248, 113, 113, 0.3);
+    background-color: rgba(248, 113, 113, 0.1);
+}
+
 .user-meta {
     display: flex;
     flex-direction: column;
@@ -472,11 +495,15 @@ label {
 .text-cyan { color: #22d3ee; }
 .text-emerald { color: #34d399; }
 .text-green { color: #10b981; }
+.text-yellow { color: #fbbf24; }
 .text-red { color: #f87171; }
+
+.hidden { display: none !important; }
 
 .badge.text-cyan { background-color: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.2); }
 .badge.text-emerald { background-color: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.2); }
 .badge.text-green { background-color: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.2); }
+.badge.text-yellow { background-color: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.2); }
 
 /* Switch de Disponibilidad */
 .switch-container {
