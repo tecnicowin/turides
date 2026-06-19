@@ -1,4 +1,4 @@
-const CACHE_NAME = 'turides-v1';
+const CACHE_NAME = 'turides-v2';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -6,7 +6,13 @@ const STATIC_ASSETS = [
     '/app.js',
     '/manifest.json',
     '/images/logo.png',
+    '/images/logo-72.png',
+    '/images/logo-96.png',
+    '/images/logo-128.png',
+    '/images/logo-144.png',
+    '/images/logo-152.png',
     '/images/logo-192.png',
+    '/images/logo-384.png',
     '/images/logo-512.png'
 ];
 
@@ -30,11 +36,6 @@ self.addEventListener('activate', (event) => {
         })
     );
     self.clients.claim();
-    self.clients.matchAll().then((clients) => {
-        clients.forEach((client) => {
-            client.postMessage({ type: 'SW_UPDATED' });
-        });
-    });
 });
 
 self.addEventListener('fetch', (event) => {
@@ -53,19 +54,15 @@ self.addEventListener('fetch', (event) => {
     }
 
     event.respondWith(
-        caches.match(event.request).then((cached) => {
-            const fetched = fetch(event.request).then((response) => {
-                if (response && response.status === 200) {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return response;
-            }).catch(() => cached);
-
-            return cached || fetched;
-        })
+        fetch(event.request).then((response) => {
+            if (response && response.status === 200) {
+                const responseClone = response.clone();
+                caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, responseClone);
+                });
+            }
+            return response;
+        }).catch(() => caches.match(event.request))
     );
 });
 

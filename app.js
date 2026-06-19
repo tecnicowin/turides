@@ -130,7 +130,45 @@ const App = {
         await this.loadFareInfo();
         this.setupEventListeners();
         this.setupSocketListeners();
+        this.setupPWA();
         this.route();
+    },
+
+    setupPWA() {
+        this._deferredPrompt = null;
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        if (isStandalone) {
+            const installBtn = document.getElementById('btn-install-app');
+            if (installBtn) installBtn.style.display = 'none';
+            return;
+        }
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this._deferredPrompt = e;
+            const installBtn = document.getElementById('btn-install-app');
+            if (installBtn) installBtn.classList.remove('hidden');
+        });
+        window.addEventListener('appinstalled', () => {
+            this._deferredPrompt = null;
+            const installBtn = document.getElementById('btn-install-app');
+            if (installBtn) installBtn.classList.add('hidden');
+            this.showToast('TuRides instalada correctamente!', 'success');
+        });
+    },
+
+    async installPWA() {
+        if (!this._deferredPrompt) {
+            this.showToast('Abre en Chrome/Safari y usa "Agregar a pantalla de inicio".', 'info');
+            return;
+        }
+        this._deferredPrompt.prompt();
+        const { outcome } = await this._deferredPrompt.userChoice;
+        this._deferredPrompt = null;
+        const installBtn = document.getElementById('btn-install-app');
+        if (installBtn) installBtn.classList.add('hidden');
+        if (outcome === 'accepted') {
+            this.showToast('Instalando TuRides...', 'success');
+        }
     },
 
     async loadFareInfo() {
