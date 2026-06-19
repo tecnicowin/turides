@@ -74,7 +74,8 @@ const TRIP_MAP = {
     clientratingat: 'clientRatingAt', conductorratingat: 'conductorRatingAt',
     createdat: 'createdAt', completedat: 'completedAt',
     paymentverifiedat: 'paymentVerifiedAt', faremultiplier: 'fareMultiplier',
-    fareperiod: 'farePeriod', orderdetails: 'orderDetails', platformcommission: 'platformCommission'
+    fareperiod: 'farePeriod', orderdetails: 'orderDetails', platformcommission: 'platformCommission',
+    tip: 'tip'
 };
 const TXN_MAP = { tripid: 'tripId', clientid: 'clientId', conductorid: 'conductorId', amountbs: 'amountBs', bankcode: 'bankCode', createdat: 'createdAt' };
 const RECHARGE_MAP = { userid: 'userId', username: 'userName', amountbs: 'amountBs', bankcode: 'bankCode', adminnote: 'adminNote', createdat: 'createdAt', reviewedat: 'reviewedAt' };
@@ -106,8 +107,9 @@ async function initDB() {
             paymentstatus TEXT, clientrating INTEGER, conductorrating INTEGER,
             clientratingat TEXT, conductorratingat TEXT, createdat TEXT, completedat TEXT,
             paymentverifiedat TEXT, faremultiplier REAL DEFAULT 1.0, fareperiod TEXT DEFAULT 'normal',
-            orderdetails TEXT, platformcommission REAL DEFAULT 0
+            orderdetails TEXT, platformcommission REAL DEFAULT 0, tip REAL DEFAULT 0
         )`);
+        await client.query(`ALTER TABLE trips ADD COLUMN IF NOT EXISTS tip REAL DEFAULT 0`);
         await client.query(`CREATE TABLE IF NOT EXISTS transactions (
             id TEXT PRIMARY KEY, tripid TEXT, clientid TEXT, conductorid TEXT,
             amount REAL, amountbs REAL, method TEXT, status TEXT,
@@ -449,12 +451,22 @@ app.post('/api/trips', requireAuth, async (req, res) => {
     } else {
         platformCommission = parseFloat((finalPrice * PLATFORM_COMMISSION_RATE).toFixed(2));
     }
-    await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod, orderdetails, platformcommission) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)',
-        [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period, orderDetailsJson, platformCommission]);
+    await dbRun('INSERT INTO trips (id, clientid, clientname, clientphone, originaddress, destinationaddress, distance, conductorid, conductorname, conductorphone, conductorvehicle, price, pricebs, paymentmethod, status, createdat, faremultiplier, fareperiod, orderdetails, platformcommission, tip) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)',
+        [id, clientId, clientName, clientPhone, originAddress, destinationAddress, parseFloat(distance), conductorId, conductor.name, conductor.phone, `${vehicle.brand} ${vehicle.model}`, finalPrice, priceBs, paymentMethod, 'pendiente', now, fareInfo.multiplier, fareInfo.period, orderDetailsJson, platformCommission, 0]);
     const trip = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [id]));
     io.emit('trip:created', trip);
     io.to('conductor_' + conductorId).emit('trip:new_request', trip);
     res.json(trip);
+});
+
+app.put('/api/trips/:id/tip', requireAuth, async (req, res) => {
+    const trip = await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]);
+    if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+    const { tip } = req.body;
+    const tipAmount = parseFloat(tip) || 0;
+    if (tipAmount < 0) return res.status(400).json({ error: 'Propina invalida' });
+    await dbRun('UPDATE trips SET tip = $1 WHERE id = $2', [tipAmount, req.params.id]);
+    res.json({ success: true, tip: tipAmount });
 });
 
 app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
@@ -525,11 +537,13 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
         await dbRun('UPDATE users SET available = 1 WHERE id = $1', [trip.conductorid]);
         if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
             const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
-            if (client && client.balance >= trip.price) {
+            const tipAmount = trip.tip || 0;
+            const totalToCharge = trip.price + tipAmount;
+            if (client && client.balance >= totalToCharge) {
                 const conductorPass = await getPassStatus(trip.conductorid);
                 const commission = conductorPass.activePass ? 0 : (trip.platformcommission || 0);
-                const driverNet = parseFloat((trip.price - commission).toFixed(2));
-                const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
+                const driverNet = parseFloat((trip.price - commission + tipAmount).toFixed(2));
+                const newClientBal = parseFloat((client.balance - totalToCharge).toFixed(2));
                 await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
                 const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
                 if (conductor) {
@@ -537,12 +551,16 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
                     await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
                 }
                 const rateBcv = await getBCVRate();
-                const amountBs = parseFloat((trip.price * rateBcv).toFixed(2));
+                const amountBs = parseFloat((totalToCharge * rateBcv).toFixed(2));
                 await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                    ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, trip.price, amountBs, 'rkm', 'completado', now]);
+                    ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, totalToCharge, amountBs, 'rkm', 'completado', now]);
                 if (commission > 0) {
                     await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
                         ['TXN_COM_' + Date.now(), req.params.id, null, trip.conductorid, commission, parseFloat((commission * rateBcv).toFixed(2)), 'platform_commission', 'descontado', now]);
+                }
+                if (tipAmount > 0) {
+                    await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                        ['TXN_TIP_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, tipAmount, parseFloat((tipAmount * rateBcv).toFixed(2)), 'tip', 'completado', now]);
                 }
                 await dbRun('UPDATE trips SET paymentstatus = $1 WHERE id = $2', ['pagado', req.params.id]);
                 const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));

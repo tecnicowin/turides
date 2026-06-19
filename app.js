@@ -991,36 +991,67 @@ ${role === 'admin' ? `
         const trip = trips.find(t => t.id === tripId);
         if (!trip) return;
 
-        if (trip.paymentMethod === 'rkm') {
-            if (this.session.balance < trip.price) {
-                this.showToast('Saldo insuficiente en billetera.', 'error');
-                return;
-            }
-            const result = await API.post('/api/payments/rkm', { tripId });
-            if (result.error) { this.showToast(result.error, 'error'); return; }
-            this.session = await API.get(`/api/users/${this.session.id}`);
-            localStorage.setItem('turides_session', JSON.stringify(this.session));
-            this.showToast('Pago procesado. Saldo actualizado.', 'success');
-            this.renderNavbar();
-            this.updateViewContent();
-            return;
-        }
-
         this._pendingTripId = tripId;
         this._pendingTripPrice = trip.price;
         this._pendingConductorId = trip.conductorId;
+        this._pendingTip = 0;
+
+        if (trip.paymentMethod === 'rkm') {
+            this._showTipModal(trip);
+            return;
+        }
+
+        this._showTipModal(trip);
+    },
+
+    async _showTipModal(trip) {
+        document.getElementById('payment-service-amount').textContent = `$${trip.price.toFixed(2)}`;
+        document.getElementById('payment-tip-amount').textContent = `$0.00`;
+        document.getElementById('payment-total-amount').textContent = `$${trip.price.toFixed(2)}`;
         document.getElementById('payment-modal-amount').textContent = `$${trip.price.toFixed(2)}`;
         document.getElementById('payment-modal-amount-bs').textContent = `Bs ${this.toBs(trip.price)}`;
-        document.getElementById('payment-rkm-balance').textContent = `$${this.session.balance.toFixed(2)}`;
-        document.getElementById('payment-rkm-balance-bs').textContent = `Bs ${this.toBs(this.session.balance)}`;
-        document.getElementById('rkm-payment-balance').textContent = `$${this.session.balance.toFixed(2)}`;
-        const rkmConfig = await API.get('/api/rkm-config');
-        document.getElementById('pm-bank-name').textContent = rkmConfig.bankName;
-        document.getElementById('pm-account-number').textContent = rkmConfig.accountNumber;
-        document.getElementById('pm-holder-name').textContent = rkmConfig.holderName;
-        document.getElementById('pm-document').textContent = `${rkmConfig.documentType}-${rkmConfig.documentNumber}`;
-        this.selectPaymentMethod('pago_movil');
+        document.getElementById('tip-custom').value = '';
+        document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('active'));
+        document.querySelector('.tip-preset[data-tip="0"]')?.classList.add('active');
+
+        if (trip.paymentMethod === 'rkm') {
+            document.getElementById('payment-rkm-balance').textContent = `$${this.session.balance.toFixed(2)}`;
+            document.getElementById('payment-rkm-balance-bs').textContent = `Bs ${this.toBs(this.session.balance)}`;
+            document.getElementById('rkm-payment-balance').textContent = `$${this.session.balance.toFixed(2)}`;
+            this.selectPaymentMethod('rkm');
+        } else {
+            const rkmConfig = await API.get('/api/rkm-config');
+            document.getElementById('pm-bank-name').textContent = rkmConfig.bankName;
+            document.getElementById('pm-account-number').textContent = rkmConfig.accountNumber;
+            document.getElementById('pm-holder-name').textContent = rkmConfig.holderName;
+            document.getElementById('pm-document').textContent = `${rkmConfig.documentType}-${rkmConfig.documentNumber}`;
+            this.selectPaymentMethod('pago_movil');
+        }
         document.getElementById('payment-modal').classList.remove('hidden');
+    },
+
+    setTip(amount) {
+        this._pendingTip = amount;
+        document.getElementById('tip-custom').value = amount > 0 ? amount : '';
+        document.querySelectorAll('.tip-preset').forEach(b => {
+            b.classList.toggle('active', parseFloat(b.dataset.tip) === amount);
+        });
+        this._updatePaymentTotal();
+    },
+
+    setTipCustom() {
+        const val = parseFloat(document.getElementById('tip-custom').value) || 0;
+        this._pendingTip = val;
+        document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('active'));
+        this._updatePaymentTotal();
+    },
+
+    _updatePaymentTotal() {
+        const price = this._pendingTripPrice || 0;
+        const tip = this._pendingTip || 0;
+        const total = price + tip;
+        document.getElementById('payment-tip-amount').textContent = `$${tip.toFixed(2)}`;
+        document.getElementById('payment-total-amount').textContent = `$${total.toFixed(2)}`;
     },
 
     selectPaymentMethod(method) {
@@ -1054,7 +1085,18 @@ ${role === 'admin' ? `
     async processPayment() {
         const method = this._selectedPaymentMethod || 'rkm';
         const tripId = this._pendingTripId;
+        const tip = this._pendingTip || 0;
+        const total = this._pendingTripPrice + tip;
+
+        if (tip > 0) {
+            await API.put(`/api/trips/${tripId}/tip`, { tip });
+        }
+
         if (method === 'rkm') {
+            if (this.session.balance < total) {
+                this.showToast(`Saldo insuficiente. Necesitas $${total.toFixed(2)} (servicio + propina).`, 'error');
+                return;
+            }
             const result = await API.post('/api/payments/rkm', { tripId });
             if (result.error) { this.showToast(result.error, 'error'); return; }
             this.session = await API.get(`/api/users/${this.session.id}`);
@@ -1186,12 +1228,13 @@ ${role === 'admin' ? `
                 }
                 html += `<button onclick="App.completeTripByConductor('${activeTrip.id}')" class="btn btn-purple w-full mt-3">Completar Viaje</button>`;
             } else if (activeTrip.status === 'completado') {
+                const tipInfo = activeTrip.tip > 0 ? `<p class="text-xs text-emerald font-bold mt-1">Propina: +$${activeTrip.tip.toFixed(2)}</p>` : '';
                 if (isRKM) {
-                    html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">⏳ Viaje completado. Pago pendiente.</p><p class="text-sm text-gray">El pago de <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> se transferira cuando ambos califiquen.</p><p class="text-xs text-gray mt-1">Califica al cliente para recibir tu pago.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
+                    html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">⏳ Viaje completado. Pago pendiente.</p><p class="text-sm text-gray">El pago de <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong> se transferira cuando ambos califiquen.</p>${tipInfo}<p class="text-xs text-gray mt-1">Califica al cliente para recibir tu pago.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
                 } else if (isEfectivo) {
-                    html += `<div class="p-3 bg-dark rounded border-l-yellow mb-4 text-center"><p class="text-xs text-yellow font-bold mb-2">💵 Pago en efectivo recibido.</p><p class="text-sm text-gray">Cobraste $${activeTrip.price.toFixed(2)} del cliente en efectivo.</p><p class="text-xs text-gray mt-1">Comision: -$${commission.toFixed(2)} de tu billetera.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
+                    html += `<div class="p-3 bg-dark rounded border-l-yellow mb-4 text-center"><p class="text-xs text-yellow font-bold mb-2">💵 Pago en efectivo recibido.</p><p class="text-sm text-gray">Cobraste $${activeTrip.price.toFixed(2)} del cliente en efectivo.</p>${tipInfo}<p class="text-xs text-gray mt-1">Comision: -$${commission.toFixed(2)} de tu billetera.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
                 } else {
-                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">📱 Pago movil completado.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p><p class="text-xs text-gray">El cliente transfirio directamente a tu cuenta.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
+                    html += `<div class="p-3 bg-dark rounded border-l-cyan mb-4 text-center"><p class="text-xs text-cyan font-bold mb-2">📱 Pago movil completado.</p><p class="text-sm text-gray mb-1">Monto: <strong class="text-emerald">$${activeTrip.price.toFixed(2)}</strong></p>${tipInfo}<p class="text-xs text-gray">El cliente transfirio directamente a tu cuenta.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;
                 }
             } else if (activeTrip.status === 'pago_verificado') {
                 html += `<div class="p-3 bg-dark rounded border-l-emerald mb-4 text-center"><p class="text-xs text-emerald font-bold mb-2">✅ Pago verificado. Califica al cliente.</p></div><button onclick="App.openRatingModal('${activeTrip.id}', '${activeTrip.clientId}', '${activeTrip.clientName}', 'conductor')" class="btn btn-purple w-full">Calificar al Cliente ⭐</button>`;

@@ -735,6 +735,26 @@
                 </div>
             </div>
             <div class="payment-actions">
+                <div class="tip-section" id="tip-section">
+                    <p class="tip-label">Propina (opcional)</p>
+                    <div class="tip-presets">
+                        <button class="tip-preset" onclick="App.setTip(0)" data-tip="0">$0</button>
+                        <button class="tip-preset" onclick="App.setTip(1)" data-tip="1">$1</button>
+                        <button class="tip-preset" onclick="App.setTip(2)" data-tip="2">$2</button>
+                        <button class="tip-preset" onclick="App.setTip(3)" data-tip="3">$3</button>
+                        <button class="tip-preset" onclick="App.setTip(5)" data-tip="5">$5</button>
+                    </div>
+                    <input type="number" id="tip-custom" class="input tip-input" placeholder="Otro monto" min="0" step="0.50" oninput="App.setTipCustom()">
+                </div>
+                <div class="payment-total-line">
+                    <span>Servicio:</span><span id="payment-service-amount">$0.00</span>
+                </div>
+                <div class="payment-total-line">
+                    <span>Propina:</span><span id="payment-tip-amount" class="text-emerald">$0.00</span>
+                </div>
+                <div class="payment-total-line payment-total-final">
+                    <span>Total a pagar:</span><span id="payment-total-amount" class="text-emerald font-extrabold">$0.00</span>
+                </div>
                 <button onclick="App.closePaymentModal()" class="btn btn-outline w-full">Cancelar</button>
                 <button id="payment-confirm-btn" onclick="App.processPayment()" class="btn btn-emerald w-full" disabled>Pagar con RKM</button>
             </div>
