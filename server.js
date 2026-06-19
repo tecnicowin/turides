@@ -535,48 +535,6 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
     } else if (status === 'calificado') {
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
         await dbRun('UPDATE users SET available = 1 WHERE id = $1', [trip.conductorid]);
-        if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
-            const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
-            const tipAmount = trip.tip || 0;
-            const totalToCharge = trip.price + tipAmount;
-            if (client && client.balance >= totalToCharge) {
-                const conductorPass = await getPassStatus(trip.conductorid);
-                const commission = conductorPass.activePass ? 0 : (trip.platformcommission || 0);
-                const driverNet = parseFloat((trip.price - commission + tipAmount).toFixed(2));
-                const newClientBal = parseFloat((client.balance - totalToCharge).toFixed(2));
-                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
-                const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
-                if (conductor) {
-                    const newCondBal = parseFloat((conductor.balance + driverNet).toFixed(2));
-                    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
-                }
-                const rateBcv = await getBCVRate();
-                const amountBs = parseFloat((totalToCharge * rateBcv).toFixed(2));
-                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                    ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, totalToCharge, amountBs, 'rkm', 'completado', now]);
-                if (commission > 0) {
-                    await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                        ['TXN_COM_' + Date.now(), req.params.id, null, trip.conductorid, commission, parseFloat((commission * rateBcv).toFixed(2)), 'platform_commission', 'descontado', now]);
-                }
-                if (tipAmount > 0) {
-                    await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                        ['TXN_TIP_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, tipAmount, parseFloat((tipAmount * rateBcv).toFixed(2)), 'tip', 'completado', now]);
-                }
-                await dbRun('UPDATE trips SET paymentstatus = $1 WHERE id = $2', ['pagado', req.params.id]);
-                const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));
-                const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
-                io.to('client_' + trip.clientid).emit('user:updated', updatedClient);
-                io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
-                io.emit('payment:completed', { tripId: req.params.id, method: 'rkm' });
-                const passCheck = await getPassStatus(trip.conductorid);
-                if (passCheck.activePass) {
-                    const pctUsed = Math.round((passCheck.activePass.earned / passCheck.activePass.limit) * 100);
-                    if (pctUsed >= 70) {
-                        io.to('conductor_' + trip.conductorid).emit('pass:warning', { level: pctUsed, remaining: passCheck.activePass.remaining, message: `Tu PASS esta al ${pctUsed}%. Recuerda recargar antes de que se agote.` });
-                    }
-                }
-            }
-        }
     } else {
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
     }
@@ -607,6 +565,50 @@ app.put('/api/trips/:id/rating', requireAuth, async (req, res) => {
     if (updatedTrip.clientrating && updatedTrip.conductorrating) {
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', ['calificado', req.params.id]);
         await dbRun('UPDATE users SET available = 1 WHERE id = $1', [updatedTrip.conductorid]);
+        if (updatedTrip.paymentmethod === 'rkm' && updatedTrip.paymentstatus !== 'pagado') {
+            const client = await dbGet('SELECT * FROM users WHERE id = $1', [updatedTrip.clientid]);
+            const tipAmount = updatedTrip.tip || 0;
+            const totalToCharge = updatedTrip.price + tipAmount;
+            if (client) {
+                const conductorPass = await getPassStatus(updatedTrip.conductorid);
+                const commission = conductorPass.activePass ? 0 : (updatedTrip.platformcommission || 0);
+                const driverNet = parseFloat((updatedTrip.price - commission + tipAmount).toFixed(2));
+                const newClientBal = parseFloat((client.balance - totalToCharge).toFixed(2));
+                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, updatedTrip.clientid]);
+                const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [updatedTrip.conductorid]);
+                if (conductor) {
+                    const newCondBal = parseFloat((conductor.balance + driverNet).toFixed(2));
+                    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, updatedTrip.conductorid]);
+                }
+                const rateBcv = await getBCVRate();
+                const amountBs = parseFloat((totalToCharge * rateBcv).toFixed(2));
+                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                    ['TXN_' + Date.now(), req.params.id, updatedTrip.clientid, updatedTrip.conductorid, totalToCharge, amountBs, 'rkm', 'completado', now]);
+                if (commission > 0) {
+                    await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                        ['TXN_COM_' + Date.now(), req.params.id, null, updatedTrip.conductorid, commission, parseFloat((commission * rateBcv).toFixed(2)), 'platform_commission', 'descontado', now]);
+                }
+                if (tipAmount > 0) {
+                    await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                        ['TXN_TIP_' + Date.now(), req.params.id, updatedTrip.clientid, updatedTrip.conductorid, tipAmount, parseFloat((tipAmount * rateBcv).toFixed(2)), 'tip', 'completado', now]);
+                }
+                await dbRun('UPDATE trips SET paymentstatus = $1 WHERE id = $2', ['pagado', req.params.id]);
+                const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [updatedTrip.clientid]));
+                const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [updatedTrip.conductorid]));
+                io.to('client_' + updatedTrip.clientid).emit('user:updated', updatedClient);
+                io.to('conductor_' + updatedTrip.conductorid).emit('user:updated', updatedConductor);
+                io.emit('payment:completed', { tripId: req.params.id, method: 'rkm', total: totalToCharge, tip: tipAmount, commission });
+                const passCheck = await getPassStatus(updatedTrip.conductorid);
+                if (passCheck.activePass) {
+                    const pctUsed = Math.round((passCheck.activePass.earned / passCheck.activePass.limit) * 100);
+                    if (pctUsed >= 70) {
+                        io.to('conductor_' + updatedTrip.conductorid).emit('pass:warning', { level: pctUsed, remaining: passCheck.activePass.remaining, message: `Tu PASS esta al ${pctUsed}%. Recuerda recargar antes de que se agote.` });
+                    }
+                }
+            } else {
+                console.log(`[RATING] Saldo insuficiente cliente ${updatedTrip.clientid}: balance=${client?.balance} needed=${totalToCharge}`);
+            }
+        }
     }
     const final = parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id]));
     io.emit('trip:rated', final);
