@@ -1243,20 +1243,23 @@ ${role === 'admin' ? `
 
             if (isActive) {
                 const ap = passStatus.activePass;
-                passHtml += `<div class="pricing-card mb-3" style="border:2px solid ${pctUsed >= 80 ? '#ef4444' : '#10b981'};">
-                    <div class="flex justify-between items-center mb-2">
-                        <div><span class="font-bold">Nivel: <span class="text-purple">${ap.label}</span></span><br><span class="text-xs text-gray">Activado: ${new Date(ap.purchasedAt).toLocaleDateString()}</span></div>
-                        <div class="text-right"><span class="text-xs text-gray">Limite</span><br><span class="text-sm font-bold text-cyan">$${ap.limit}</span></div>
-                    </div>
-                    <div style="width:100%;height:10px;background:rgba(255,255,255,0.1);border-radius:10px;overflow:hidden;">
-                        <div style="width:${pctUsed}%;height:100%;background:${pctUsed >= 80 ? 'linear-gradient(90deg,#ef4444,#dc2626)' : 'linear-gradient(90deg,#10b981,#059669)'};border-radius:10px;transition:width 0.5s;"></div>
-                    </div>
-                    <div class="flex justify-between mt-2">
-                        <span class="text-xs font-bold text-emerald">$${ap.earned.toFixed(2)} ganados</span>
-                        <span class="text-xs font-bold ${pctUsed >= 80 ? 'text-red' : 'text-cyan'}">$${ap.remaining.toFixed(2)} restantes</span>
-                    </div>
-                    ${pctUsed >= 80 ? `<p class="text-xs text-red font-bold mt-2 text-center">⚠️ Tu PASS esta al ${pctUsed}%. Cuando se agote, compra otro PASS o vuelve al plan normal.</p>` : ''}
-                </div>`;
+                const consumedColor = pctUsed <= 30 ? 'text-emerald' : pctUsed <= 60 ? 'text-yellow' : 'text-red';
+                passHtml += `
+                    <div class="pricing-card mb-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <div><span class="font-bold">Nivel: <span class="text-purple">${ap.label}</span></span></div>
+                            <span class="text-xs text-gray">Activado: ${new Date(ap.purchasedAt).toLocaleDateString()}</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-bold">Valor:</span>
+                            <span class="text-sm font-bold text-cyan">$${ap.limit.toFixed(2)}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold">Consumido:</span>
+                            <span class="text-sm font-extrabold ${consumedColor}">$${ap.earned.toFixed(2)}</span>
+                        </div>
+                        ${pctUsed >= 70 ? `<p class="text-xs ${consumedColor} font-bold mt-2 text-center">⚠️ Tu PASS esta al ${pctUsed}%. Cuando se agote, compra otro PASS.</p>` : ''}
+                    </div>`;
             } else {
                 passHtml += `<div class="p-3 bg-gray rounded mb-3 text-center">
                     <p class="text-sm text-gray">No tienes PASS activo.</p>
@@ -1552,20 +1555,23 @@ ${role === 'admin' ? `
                 <h3 class="text-lg font-bold mb-3 flex items-center gap-2">🎫 PASS TuRides</h3>`;
             if (isActive) {
                 const ap = passStatus.activePass;
-                passHtml += `<div class="pricing-card mb-3" style="border:2px solid ${pctUsed >= 80 ? '#ef4444' : '#10b981'};">
-                    <div class="flex justify-between items-center mb-2">
-                        <div><span class="font-bold">Nivel: <span class="text-purple">${ap.label}</span></span><br><span class="text-xs text-gray">Activado: ${new Date(ap.purchasedAt).toLocaleDateString()}</span></div>
-                        <div class="text-right"><span class="text-xs text-gray">Limite</span><br><span class="text-sm font-bold text-cyan">$${ap.limit}</span></div>
-                    </div>
-                    <div style="width:100%;height:10px;background:rgba(255,255,255,0.1);border-radius:10px;overflow:hidden;">
-                        <div style="width:${pctUsed}%;height:100%;background:${pctUsed >= 80 ? 'linear-gradient(90deg,#ef4444,#dc2626)' : 'linear-gradient(90deg,#10b981,#059669)'};border-radius:10px;"></div>
-                    </div>
-                    <div class="flex justify-between mt-2">
-                        <span class="text-xs font-bold text-emerald">$${ap.earned.toFixed(2)} ganados</span>
-                        <span class="text-xs font-bold ${pctUsed >= 80 ? 'text-red' : 'text-cyan'}">$${ap.remaining.toFixed(2)} restantes</span>
-                    </div>
-                    ${pctUsed >= 80 ? `<p class="text-xs text-red font-bold mt-2 text-center">⚠️ Tu PASS esta al ${pctUsed}%. Compra otro PASS o vuelve al plan normal.</p>` : ''}
-                </div>`;
+                const consumedColor = pctUsed <= 30 ? 'text-emerald' : pctUsed <= 60 ? 'text-yellow' : 'text-red';
+                passHtml += `
+                    <div class="pricing-card mb-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <div><span class="font-bold">Nivel: <span class="text-purple">${ap.label}</span></span></div>
+                            <span class="text-xs text-gray">Activado: ${new Date(ap.purchasedAt).toLocaleDateString()}</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-bold">Valor:</span>
+                            <span class="text-sm font-bold text-cyan">$${ap.limit.toFixed(2)}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold">Consumido:</span>
+                            <span class="text-sm font-extrabold ${consumedColor}">$${ap.earned.toFixed(2)}</span>
+                        </div>
+                        ${pctUsed >= 70 ? `<p class="text-xs ${consumedColor} font-bold mt-2 text-center">⚠️ Tu PASS esta al ${pctUsed}%. Cuando se agote, compra otro PASS.</p>` : ''}
+                    </div>`;
             } else {
                 passHtml += `<div class="p-3 bg-gray rounded mb-3 text-center"><p class="text-sm text-gray">No tienes PASS activo. Adquiere un PASS para generar sin comisiones.</p></div>`;
             }
