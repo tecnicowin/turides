@@ -1313,6 +1313,35 @@ app.put('/api/admin/pass-verify/:id', requireAdmin, async (req, res) => {
     }
 });
 
+// === ADMIN PASS Overview ===
+app.get('/api/admin/pass-overview', requireAdmin, async (req, res) => {
+    try {
+        const users = await dbAll("SELECT * FROM users WHERE role IN ('conductor','mensajero') ORDER BY name ASC");
+        const overview = [];
+        for (const u of users) {
+            const passStatus = await getPassStatus(u.id);
+            const allPurchases = await dbAll('SELECT * FROM pass_purchases WHERE userid = $1 ORDER BY createdat DESC', [u.id]);
+            overview.push({
+                userId: u.id,
+                userName: u.name,
+                phone: u.phone,
+                role: u.role,
+                balance: parseFloat(u.balance || 0),
+                currentLevel: passStatus.currentLevel,
+                purchasesByLevel: passStatus.purchasesByLevel,
+                totalPurchases: allPurchases.length,
+                activePass: passStatus.activePass,
+                totalSpent: passStatus.totalSpent,
+                totalReferrals: passStatus.totalReferrals
+            });
+        }
+        res.json(overview);
+    } catch (err) {
+        console.error('Pass overview error:', err);
+        res.status(500).json({ error: 'Error al obtener overview PASS' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
     server.listen(PORT, () => {

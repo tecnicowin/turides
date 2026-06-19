@@ -2259,6 +2259,58 @@ ${role === 'admin' ? `
         }
         html += `</div></div>`;
 
+        html += `<div class="mt-4"><h3 class="text-lg font-bold mb-3 text-cyan" style="cursor:pointer" onclick="App.toggleAdminSection('admin-pass-overview-body')"><span id="admin-pass-overview-body-toggle">▲</span> 📊 PASS Overview - Conductores y Mensajeros</h3>`;
+        html += `<div id="admin-pass-overview-body">`;
+        try {
+            const passOverview = await API.get('/api/admin/pass-overview');
+            const activePasses = passOverview.filter(p => p.activePass);
+            const noPass = passOverview.filter(p => !p.activePass && p.totalPurchases === 0);
+            const totalRevenue = passOverview.reduce((a, p) => a + (p.totalSpent || 0), 0);
+            html += `<div class="grid grid-3 gap-3 mb-3">
+                <div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">Total Conductores/Mensajeros</p><p class="text-xl font-extrabold text-purple">${passOverview.length}</p></div>
+                <div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">PASSes Activos</p><p class="text-xl font-extrabold text-emerald">${activePasses.length}</p></div>
+                <div class="p-3 bg-gray rounded text-center"><p class="text-xs text-gray">Ingresos PASS</p><p class="text-xl font-extrabold text-yellow">$${totalRevenue.toFixed(2)}</p></div>
+            </div>`;
+            if (passOverview.length === 0) {
+                html += `<p class="text-center text-gray p-4">No hay conductores ni mensajeros registrados.</p>`;
+            } else {
+                html += `<div style="overflow-x:auto;"><table class="table"><thead><tr>
+                    <th>Conductor</th><th>Nivel</th><th>Passes</th><th>Activo</th><th>Saldo</th><th>Restante</th>
+                </tr></thead><tbody>`;
+                passOverview.forEach(p => {
+                    const lvl = { bronce: '🥉', plata: '🥈', oro: '🥇' };
+                    const lvlColor = { bronce: 'text-yellow', plata: 'text-cyan', oro: 'text-emerald' };
+                    const pb = p.purchasesByLevel || {};
+                    const passCount = `${pb.bronce || 0}B/${pb.plata || 0}P/${pb.oro || 0}O`;
+                    const ap = p.activePass;
+                    const roleBadge = p.role === 'mensajero' ? '<span class="badge text-purple" style="font-size:9px;">MSG</span>' : '';
+                    let remainingHtml = '-';
+                    if (ap) {
+                        const pct = Math.round((ap.earned / ap.limit) * 100);
+                        const barColor = pct <= 30 ? 'text-emerald' : pct <= 60 ? 'text-yellow' : 'text-red';
+                        const barBg = pct <= 30 ? '#10b981' : pct <= 60 ? '#fbbf24' : '#ef4444';
+                        remainingHtml = `<div><span class="font-bold ${barColor}">$${ap.remaining.toFixed(0)}</span><span class="text-xs text-gray">/$${ap.limit}</span>
+                            <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:4px;margin-top:2px;"><div style="background:${barBg};width:${pct}%;height:100%;border-radius:4px;"></div></div></div>`;
+                    }
+                    html += `<tr>
+                        <td><strong>${p.userName}</strong> ${roleBadge}<br><span class="text-xs text-gray">${p.phone || ''}</span></td>
+                        <td><span class="font-bold ${lvlColor[p.currentLevel] || 'text-gray'}">${lvl[p.currentLevel] || '-'} ${p.currentLevel.charAt(0).toUpperCase() + p.currentLevel.slice(1)}</span></td>
+                        <td><span class="text-xs font-mono">${passCount}</span><br><span class="text-xs text-gray">${p.totalPurchases} total</span></td>
+                        <td>${ap ? `<span class="badge ${lvlColor[ap.level] || 'text-emerald'}">${lvl[ap.level] || ''} ${ap.label}</span><br><span class="text-xs text-gray">Gasto: $${ap.earned.toFixed(0)}</span>` : '<span class="text-xs text-red">Sin PASS</span>'}</td>
+                        <td><span class="font-bold text-emerald">$${p.balance.toFixed(2)}</span></td>
+                        <td>${remainingHtml}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+                if (noPass.length > 0) {
+                    html += `<div class="p-2 bg-dark rounded mt-2"><p class="text-xs text-gray text-center">⚠️ ${noPass.length} conductor(es) sin PASS: ${noPass.map(n => n.userName).join(', ')}</p></div>`;
+                }
+            }
+        } catch(e) {
+            html += `<p class="text-center text-red p-4">Error cargando PASS overview.</p>`;
+        }
+        html += `</div></div>`;
+
         container.innerHTML = html;
     },
 
