@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcrypt');
 const PDFDocument = require('pdfkit');
 const { dbRun, dbGet, dbAll, dbExec, dbClientExec } = require('./db');
@@ -464,33 +465,8 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
     if (status === 'completado') {
         const isMudanza = trip.orderdetails && (trip.paymentmethod === 'rkm' || trip.paymentmethod === 'efectivo' || trip.paymentmethod === 'pago_movil');
         if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
-            const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
-            if (!client || client.balance < trip.price) {
-                return res.status(400).json({ error: 'Saldo insuficiente del cliente para pago RKM' });
-            }
-            const commission = trip.platformcommission || 0;
-            const driverNet = parseFloat((trip.price - commission).toFixed(2));
-            const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
-            await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
-            const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
-            if (conductor) {
-                const newCondBal = parseFloat((conductor.balance + driverNet).toFixed(2));
-                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
-            }
-            const rate = await getBCVRate();
-            const amountBs = parseFloat((trip.price * rate).toFixed(2));
-            await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, trip.price, amountBs, 'rkm', 'completado', now]);
-            if (commission > 0) {
-                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                    ['TXN_COM_' + Date.now(), req.params.id, null, trip.conductorid, commission, parseFloat((commission * rate).toFixed(2)), 'platform_commission', 'descontado', now]);
-            }
-            await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pagado', req.params.id]);
-            const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));
-            const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
-            io.to('client_' + trip.clientid).emit('user:updated', updatedClient);
-            io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
-            io.emit('payment:completed', { tripId: req.params.id, method: 'rkm' });
+            await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pendiente', req.params.id]);
+            io.emit('trip:status_changed', parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id])));
         } else if (trip.paymentmethod === 'efectivo') {
             const commission = trip.platformcommission || 0;
             if (commission > 0) {
@@ -507,8 +483,7 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
             const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
             io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
         } else if (trip.paymentmethod === 'pago_movil') {
-            await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', ['pago_movil_pendiente', now, req.params.id]);
-            await dbRun('UPDATE users SET available = 1 WHERE id = $1', [trip.conductorid]);
+            await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pagado', req.params.id]);
             io.emit('trip:status_changed', parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id])));
         } else {
             await dbRun('UPDATE trips SET status = $1, completedat = $2 WHERE id = $3', [status, now, req.params.id]);
@@ -531,6 +506,9 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
         const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
         const conductorPass = await getPassStatus(trip.conductorid);
         const hasActivePass = !!conductorPass.activePass;
+        if ((trip.paymentmethod === 'pago_movil' || trip.paymentmethod === 'efectivo') && !hasActivePass) {
+            return res.status(400).json({ error: 'Necesitas un PASS activo para aceptar servicios con Pago Movil o Efectivo. Adquiere un PASS desde tu billetera.' });
+        }
         if (!hasActivePass) {
             const isMudanza = trip.orderdetails && trip.orderdetails.subtype && MUDANZA_COMMISSION[trip.orderdetails.subtype];
             const commissionRate = isMudanza ? MUDANZA_COMMISSION[trip.orderdetails.subtype] : PLATFORM_COMMISSION_RATE;
@@ -544,6 +522,41 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
     } else if (status === 'calificado') {
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
         await dbRun('UPDATE users SET available = 1 WHERE id = $1', [trip.conductorid]);
+        if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
+            const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
+            if (client && client.balance >= trip.price) {
+                const commission = trip.platformcommission || 0;
+                const driverNet = parseFloat((trip.price - commission).toFixed(2));
+                const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
+                await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
+                const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
+                if (conductor) {
+                    const newCondBal = parseFloat((conductor.balance + driverNet).toFixed(2));
+                    await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newCondBal, trip.conductorid]);
+                }
+                const rateBcv = await getBCVRate();
+                const amountBs = parseFloat((trip.price * rateBcv).toFixed(2));
+                await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                    ['TXN_' + Date.now(), req.params.id, trip.clientid, trip.conductorid, trip.price, amountBs, 'rkm', 'completado', now]);
+                if (commission > 0) {
+                    await dbRun('INSERT INTO transactions (id, tripid, clientid, conductorid, amount, amountbs, method, status, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                        ['TXN_COM_' + Date.now(), req.params.id, null, trip.conductorid, commission, parseFloat((commission * rateBcv).toFixed(2)), 'platform_commission', 'descontado', now]);
+                }
+                await dbRun('UPDATE trips SET paymentstatus = $1 WHERE id = $2', ['pagado', req.params.id]);
+                const updatedClient = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]));
+                const updatedConductor = parseUser(await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]));
+                io.to('client_' + trip.clientid).emit('user:updated', updatedClient);
+                io.to('conductor_' + trip.conductorid).emit('user:updated', updatedConductor);
+                io.emit('payment:completed', { tripId: req.params.id, method: 'rkm' });
+                const passCheck = await getPassStatus(trip.conductorid);
+                if (passCheck.activePass) {
+                    const pctUsed = Math.round((passCheck.activePass.earned / passCheck.activePass.limit) * 100);
+                    if (pctUsed >= 70) {
+                        io.to('conductor_' + trip.conductorid).emit('pass:warning', { level: pctUsed, remaining: passCheck.activePass.remaining, message: `Tu PASS esta al ${pctUsed}%. Recuerda recargar antes de que se agote.` });
+                    }
+                }
+            }
+        }
     } else {
         await dbRun('UPDATE trips SET status = $1 WHERE id = $2', [status, req.params.id]);
     }
@@ -751,48 +764,69 @@ app.put('/api/wallet/withdrawals/:id', requireAdmin, async (req, res) => {
 app.get('/api/wallet/withdrawals/:id/ticket', requireAuth, async (req, res) => {
     const withdrawal = await dbGet('SELECT * FROM withdrawals WHERE id = $1', [req.params.id]);
     if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
+    const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [withdrawal.conductorid]);
+    const config = await getConfig();
+    const bankInfo = typeof withdrawal.bankinfo === 'string' ? JSON.parse(withdrawal.bankinfo || '{}') : (withdrawal.bankinfo || {});
+    const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano de Credito', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo Soberano', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
+
+    const adminBankCode = (config.accountNumber || '').replace(/-/g, '').slice(0, 4);
+    const adminBankName = config.bankName || bankNames[adminBankCode] || 'TuRides';
+    const conductorBankCode = (bankInfo.account || '').replace(/-/g, '').slice(0, 4);
+    const conductorBankName = bankNames[bankInfo.bank] || bankInfo.bank || '-';
+    const adminLast4 = (config.accountNumber || '').slice(-4) || '****';
+    const conductorLast4 = (bankInfo.account || '').slice(-4) || '****';
+    const conductorPhone = bankInfo.phone || conductor?.phone || '-';
+    const conductorCedula = bankInfo.cedula || '-';
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=ticket_retiro_${withdrawal.id}.pdf`);
     doc.pipe(res);
-    const bankInfo = typeof withdrawal.bankinfo === 'string' ? JSON.parse(withdrawal.bankinfo || '{}') : (withdrawal.bankinfo || {});
-    const bankNames = { '0102': 'Banco de Venezuela', '0104': 'Banco Provincial', '0105': 'Banco Mercantil', '0108': 'Banco BBVA', '0114': 'Banco Bancaribe', '0116': 'Banco Plaza', '0128': 'Banco Occidental', '0134': 'Banco Venezolano de Credito', '0151': 'Banco BFC', '0156': '100% Banco', '0157': 'Banco Del Tesoro', '0163': 'Banco Guerra', '0168': 'Bancrecer', '0169': 'Mi Banco', '0171': 'Banco del Pueblo Soberano', '0172': 'Bancamiga', '0173': 'Banco Internacional', '0174': 'Banplus', '0175': 'Bicentenario', '0177': 'Banco Facilito', '0185': 'Fondo Comun' };
-    const bankName = bankNames[bankInfo.bank] || bankInfo.bank || '-';
-    doc.fontSize(20).font('Helvetica-Bold').text('TuRides', { align: 'center' });
-    doc.fontSize(14).font('Helvetica').text('Comprobante de Retiro', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(10).fillColor('#666');
-    doc.text(`Fecha: ${withdrawal.createdat ? new Date(withdrawal.createdat).toLocaleString() : '-'}`, { align: 'left' });
-    doc.text(`ID: ${withdrawal.id}`, { align: 'left' });
-    doc.moveDown();
-    doc.fontSize(12).fillColor('#000').font('Helvetica-Bold').text('Datos del Conductor');
-    doc.fontSize(10).font('Helvetica');
-    doc.text(`Nombre: ${withdrawal.conductorname}`);
-    doc.moveDown();
-    doc.fontSize(12).font('Helvetica-Bold').text('Detalle del Retiro');
-    doc.fontSize(10).font('Helvetica');
-    doc.text(`Monto solicitado: $${withdrawal.amount.toFixed(2)}`);
-    doc.text(`Tasa BCV: Bs ${withdrawal.amountbs / withdrawal.amount}/USD`);
-    doc.text(`Monto en Bs: Bs ${withdrawal.amountbs.toFixed(2)}`);
-    doc.text(`Comision de retiro: $${withdrawal.commission.toFixed(2)} (${withdrawal.commission > 0 ? ((withdrawal.commission / withdrawal.amount) * 100).toFixed(0) + '%' : '0% - Mudanza'})`);
-    doc.text(`Monto a transferir: $${withdrawal.netamount.toFixed(2)}`);
-    doc.moveDown();
-    doc.fontSize(12).font('Helvetica-Bold').text('Datos Bancarios');
-    doc.fontSize(10).font('Helvetica');
-    doc.text(`Banco: ${bankName}`);
-    doc.text(`Cuenta: ${bankInfo.account || '-'}`);
-    doc.text(`Titular: ${bankInfo.name || '-'}`);
-    doc.text(`Telefono: ${bankInfo.phone || '-'}`);
-    doc.moveDown();
-    doc.fontSize(10).fillColor('#999').text(`Estado: ${withdrawal.status.toUpperCase()}`);
-    if (withdrawal.reference) {
-        doc.text(`Referencia: ${withdrawal.reference}`);
+
+    const logoPath = path.join(__dirname, 'images', 'logo.png');
+    if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 200, 30, { width: 150 });
+        doc.moveDown(3);
     }
-    if (withdrawal.reviewedat) {
-        doc.text(`Procesado: ${new Date(withdrawal.reviewedat).toLocaleString()}`);
-    }
+
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#000').text('COMPROBANTE DE RETIRO', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(9).fillColor('#666').text(`Fecha: ${withdrawal.createdat ? new Date(withdrawal.createdat).toLocaleString() : '-'}`, { align: 'center' });
+    doc.text(`Solicitud: ${withdrawal.id}`, { align: 'center' });
+    doc.moveDown(1);
+
+    doc.strokeColor('#E67E22').lineWidth(2).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('USUARIO CONDUCTOR');
+    doc.fontSize(10).font('Helvetica').text(`Nombre: ${withdrawal.conductorname}`);
+    doc.text(`Telefono: ${conductorPhone}`);
+    doc.text(`Cedula: ${conductorCedula}`);
+    doc.moveDown(0.5);
+
+    doc.fontSize(11).font('Helvetica-Bold').text('DETALLE DEL RETIRO');
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Monto solicitado:          $${withdrawal.amount.toFixed(2)}`);
+    doc.text(`Comision Gastos Admon: - $${withdrawal.commission.toFixed(2)} (${withdrawal.commission > 0 ? ((withdrawal.commission / withdrawal.amount) * 100).toFixed(0) + '%' : '0%'})`);
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(11).text(`TOTAL RETIRADO:          $${withdrawal.netamount.toFixed(2)}`);
+    doc.moveDown(0.5);
+
+    doc.strokeColor('#E67E22').lineWidth(2).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('DATOS DE LA TRANSFERENCIA');
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Banco Emisor:       ${adminBankName} (****${adminLast4})`);
+    doc.text(`Banco Receptor:  ${conductorBankName} (****${conductorLast4})`);
+    doc.text(`Referencia:         ${withdrawal.reference || 'Sin referencia'}`);
+    doc.moveDown(0.5);
+
+    doc.strokeColor('#E67E22').lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(1);
+
+    doc.fontSize(8).fillColor('#999').text(`Estado: ${withdrawal.status.toUpperCase()}${withdrawal.reviewedat ? ' | Procesado: ' + new Date(withdrawal.reviewedat).toLocaleString() : ''}`, { align: 'center' });
     doc.moveDown(2);
-    doc.fontSize(8).fillColor('#ccc').text('TuRides - Comprobante de retiro generado automaticamente', { align: 'center' });
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#E67E22').text('TuRides - Uniendo Destinos', { align: 'center' });
     doc.end();
 });
 
@@ -819,8 +853,7 @@ app.get('/api/admin/daily-report', requireAdmin, async (req, res) => {
     const totalVolume = parsedTrips.reduce((a, t) => a + t.price, 0);
     const totalCommission = parsedTrips.reduce((a, t) => a + (t.platformCommission || 0), 0);
     const completedTrips = parsedTrips.filter(t => ['completado', 'pago_verificado', 'calificado'].includes(t.status));
-    const pendingPayments = parsedTrips.filter(t => t.status === 'pago_movil_pendiente');
-    res.json({ date, totalTrips: parsedTrips.length, completedTrips: completedTrips.length, totalVolume, totalCommission, byVehicleType, pendingPayments: pendingPayments.length, transactions: transactions.map(t => mapRow(t, TXN_MAP)), withdrawals: withdrawals.map(w => mapRow(w, WITHDRAWAL_MAP)) });
+    res.json({ date, totalTrips: parsedTrips.length, completedTrips: completedTrips.length, totalVolume, totalCommission, byVehicleType, pendingPayments: 0, transactions: transactions.map(t => mapRow(t, TXN_MAP)), withdrawals: withdrawals.map(w => mapRow(w, WITHDRAWAL_MAP)) });
 });
 
 // === TRANSACTIONS ===
@@ -1089,7 +1122,7 @@ async function getPassStatus(userId) {
     let earnedWithPass = 0;
     if (lastPurchase) {
         const tier = PASS_TIERS[lastPurchase.passlevel];
-        const trips = await dbAll('SELECT price FROM trips WHERE conductorid = $1 AND status IN ($2,$3,$4) AND createdat >= $5', [userId, 'completado', 'pago_verificado', 'calificado', lastPurchase.createdat]);
+        const trips = await dbAll('SELECT price FROM trips WHERE conductorid = $1 AND status IN ($2,$3,$4) AND paymentmethod = $5 AND createdat >= $6', [userId, 'completado', 'pago_verificado', 'calificado', 'rkm', lastPurchase.createdat]);
         earnedWithPass = trips.reduce((acc, t) => acc + t.price, 0);
         if (earnedWithPass < tier.limit) {
             activePass = { level: lastPurchase.passlevel, label: tier.label, cost: tier.cost, limit: tier.limit, earned: earnedWithPass, remaining: tier.limit - earnedWithPass, purchasedAt: lastPurchase.createdat };
@@ -1116,6 +1149,9 @@ app.post('/api/pass/buy', requireAuth, async (req, res) => {
         if (!PASS_TIERS[passLevel]) return res.status(400).json({ error: 'Nivel PASS invalido' });
         const tier = PASS_TIERS[passLevel];
         const status = await getPassStatus(req.authUser.id);
+        if (status.activePass) {
+            return res.status(400).json({ error: 'Ya tienes un PASS activo. Debes esperar a que se agote antes de comprar otro. Tu PASS actual tiene $' + status.activePass.remaining.toFixed(2) + ' restantes.' });
+        }
         const allowed = [];
         if (status.currentLevel === 'bronce') { allowed.push('bronce'); }
         else if (status.currentLevel === 'plata') { allowed.push('bronce', 'plata'); }
