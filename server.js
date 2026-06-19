@@ -468,7 +468,8 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
             await dbRun('UPDATE trips SET status = $1, completedat = $2, paymentstatus = $3 WHERE id = $4', [status, now, 'pendiente', req.params.id]);
             io.emit('trip:status_changed', parseTrip(await dbGet('SELECT * FROM trips WHERE id = $1', [req.params.id])));
         } else if (trip.paymentmethod === 'efectivo') {
-            const commission = trip.platformcommission || 0;
+            const conductorPass = await getPassStatus(trip.conductorid);
+            const commission = conductorPass.activePass ? 0 : (trip.platformcommission || 0);
             if (commission > 0) {
                 const conductor = await dbGet('SELECT * FROM users WHERE id = $1', [trip.conductorid]);
                 if (conductor) {
@@ -525,7 +526,8 @@ app.put('/api/trips/:id/status', requireAuth, async (req, res) => {
         if (trip.paymentmethod === 'rkm' && trip.paymentstatus !== 'pagado') {
             const client = await dbGet('SELECT * FROM users WHERE id = $1', [trip.clientid]);
             if (client && client.balance >= trip.price) {
-                const commission = trip.platformcommission || 0;
+                const conductorPass = await getPassStatus(trip.conductorid);
+                const commission = conductorPass.activePass ? 0 : (trip.platformcommission || 0);
                 const driverNet = parseFloat((trip.price - commission).toFixed(2));
                 const newClientBal = parseFloat((client.balance - trip.price).toFixed(2));
                 await dbRun('UPDATE users SET balance = $1 WHERE id = $2', [newClientBal, trip.clientid]);
@@ -1122,7 +1124,7 @@ async function getPassStatus(userId) {
     let earnedWithPass = 0;
     if (lastPurchase) {
         const tier = PASS_TIERS[lastPurchase.passlevel];
-        const trips = await dbAll('SELECT price FROM trips WHERE conductorid = $1 AND status IN ($2,$3,$4) AND paymentmethod = $5 AND createdat >= $6', [userId, 'completado', 'pago_verificado', 'calificado', 'rkm', lastPurchase.createdat]);
+        const trips = await dbAll('SELECT price FROM trips WHERE conductorid = $1 AND status IN ($2,$3,$4) AND createdat >= $5', [userId, 'completado', 'pago_verificado', 'calificado', lastPurchase.createdat]);
         earnedWithPass = trips.reduce((acc, t) => acc + t.price, 0);
         if (earnedWithPass < tier.limit) {
             activePass = { level: lastPurchase.passlevel, label: tier.label, cost: tier.cost, limit: tier.limit, earned: earnedWithPass, remaining: tier.limit - earnedWithPass, purchasedAt: lastPurchase.createdat };
